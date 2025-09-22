@@ -1,16 +1,13 @@
 import os
 import uuid
-import re
 import boto3
+from botocore.config import Config
 import streamlit as st
-
-# =========================
-# Configuração básica
-# =========================
-st.set_page_config(page_title="Chat – Bedrock Agent", page_icon="💬", layout="wide")
 
 # -------- Persistência de sessão no URL --------
 # Usa query params para manter o session_id mesmo após refresh.
+# Compatível com versões novas (st.query_params) e antigas (experimental_*).
+
 def _get_query_params():
     try:
         return dict(st.query_params)
@@ -23,10 +20,17 @@ def _set_query_params(**params):
     except Exception:
         st.experimental_set_query_params(**params)
 
+# =========================
+# Configuração básica
+# =========================
+st.set_page_config(page_title="Chat – Bedrock Agent", page_icon="💬", layout="wide")
+
 # Lê configurações de ambiente/Secrets (recomendado no Streamlit Cloud)
 AWS_REGION = st.secrets.get("AWS_REGION") or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 AGENT_ID = st.secrets.get("BEDROCK_AGENT_ID") or os.getenv("BEDROCK_AGENT_ID", "")
 AGENT_ALIAS_ID = st.secrets.get("BEDROCK_AGENT_ALIAS_ID") or os.getenv("BEDROCK_AGENT_ALIAS_ID", "")
+READ_TIMEOUT = int(st.secrets.get("AWS_READ_TIMEOUT", os.getenv("AWS_READ_TIMEOUT", 300)))
+CONNECT_TIMEOUT = int(st.secrets.get("AWS_CONNECT_TIMEOUT", os.getenv("AWS_CONNECT_TIMEOUT", 20)))
 
 # =========================
 # Cliente Bedrock Agent Runtime
@@ -34,7 +38,8 @@ AGENT_ALIAS_ID = st.secrets.get("BEDROCK_AGENT_ALIAS_ID") or os.getenv("BEDROCK_
 @st.cache_resource(show_spinner=False)
 def get_bedrock_agent_runtime():
     try:
-        client = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
+        cfg = Config(read_timeout=READ_TIMEOUT, connect_timeout=CONNECT_TIMEOUT, retries={"max_attempts": 4, "mode": "standard"})
+        client = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION, config=cfg)
         return client
     except Exception as e:
         st.error(f"Falha ao inicializar o cliente Bedrock Agent Runtime: {e}")
@@ -45,10 +50,12 @@ client = get_bedrock_agent_runtime()
 # =========================
 # Funções utilitárias
 # =========================
+
 def ensure_session():
     """Garante um session_id estável por sessão e persiste no URL até o usuário limpar."""
     if "messages" not in st.session_state:
         st.session_state.messages = []  # histórico local
+
     sid = st.session_state.get("session_id")
     if not sid:
         qp = _get_query_params()
@@ -67,10 +74,8 @@ def reset_session():
     st.session_state.messages = []
     _set_query_params(sid=new_sid)
 
+
 def stream_agent_response(user_text: str):
-    """Invoca o Agent e faz streaming do texto de resposta.
-    A interface APENAS conversa com o Agent (sem chamar outras APIs diretamente).
-    """
     if not AGENT_ID or not AGENT_ALIAS_ID:
         st.error("Defina BEDROCK_AGENT_ID e BEDROCK_AGENT_ALIAS_ID em st.secrets ou variáveis de ambiente.")
         return ""
@@ -81,6 +86,7 @@ def stream_agent_response(user_text: str):
             agentAliasId=AGENT_ALIAS_ID,
             sessionId=st.session_state.session_id,
             inputText=user_text,
+            enableTrace=True,
         )
 
         full_text = ""
@@ -91,18 +97,44 @@ def stream_agent_response(user_text: str):
                 yield part
         return full_text
 
-    except Exception as e:
-        msg = f"Erro ao invocar o Agent: {e}"
-        st.error(msg)
+    except client.exceptions.ThrottlingException:
+        msg = "O serviço está ocupado (Throttling). Tente novamente em alguns segundos."
+        st.warning(msg)
         yield "\n" + msg
+    except Exception as e:
+        err = f"Erro ao invocar o Agent: {e}"
+        st.error(err)
+        yield "\n" + err
 
+
+def format_response(raw_text: str) -> str:
+    """Formata retorno da emissão de DAE: mostra apenas campos preenchidos, um por linha."""
+    if not raw_text:
+        return ""
+    parts = raw_text.split()
+    buffer, linhas = [], []
+    for part in parts:
+        if ":" in part:
+            if buffer:
+                linha = " ".join(buffer).strip()
+                if not linha.endswith(":"):
+                    linhas.append(linha)
+                buffer = []
+        buffer.append(part)
+    if buffer:
+        linha = " ".join(buffer).strip()
+        if not linha.endswith(":"):
+            linhas.append(linha)
+    return "\n".join(linhas)
+
+# =========================
+# UI – Sidebar
+# =========================
 def format_dae_response(text: str) -> str:
-    """
-    Formata o retorno da emissão da DAE para 'um campo por linha',
-    exibindo apenas campos com valor.
+    """Formata o retorno da emissão da DAE para 'um campo por linha', exibindo apenas campos com valor.
     - Remove campos vazios
     - Normaliza espaços
-    - Trunca campos muito longos de código de barras
+    - (Opcional) Trunca campos muito longos de código de barras
     """
     if not text:
         return text
@@ -111,9 +143,10 @@ def format_dae_response(text: str) -> str:
     if anchor in text:
         text = text.split(anchor, 1)[1]
 
-    # Normaliza: remove quebras e múltiplos espaços
+    # Normaliza: remove quebras e múltiplos espaços sem usar escapes problemáticos
     t = " ".join(text.split())
 
+    import re
     pattern = re.compile(r"([A-Za-z_]+):")
     matches = list(pattern.finditer(t))
 
@@ -129,42 +162,16 @@ def format_dae_response(text: str) -> str:
             value = value[:60] + "…"
         lines.append(f"{key}: {value}")
 
-    return "\n".join(lines)
+    return "
+".join(lines)
 
-# =========================
-# UI – Sidebar (informativo)
-# =========================
 with st.sidebar:
     st.header("Sobre o sistema")
-    st.write(
-        """
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent commodo
-        suscipit lorem, sit amet egestas purus vulputate eget. Integer quis nisl
-        a erat facilisis tempus.
-        """
-    )
-
+    st.write("Lorem ipsum dolor sit amet, consectetur adipiscing elit...")
     st.header("Como usar")
-    st.write(
-        """
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam vitae
-        feugiat turpis. Sed posuere, dolor et faucibus pharetra, diam nisl
-        rhoncus odio, eu lacinia lorem odio non odio.
-        """
-    )
-
+    st.write("Lorem ipsum dolor sit amet, consectetur adipiscing elit...")
     st.header("Atalhos rápidos")
-    st.write(
-        """
-        • Lorem ipsum dolor sit amet.
-
-        • Consectetur adipiscing elit.
-
-        • Integer quis nisl a erat.
-
-        • Sed posuere dolor et faucibus.
-        """
-    )
+    st.write("• Lorem ipsum dolor sit amet.\n• Consectetur adipiscing elit.\n• Integer quis nisl a erat.")
 
 # =========================
 # UI – Área principal (chat estilo ChatGPT)
@@ -173,8 +180,7 @@ ensure_session()
 
 st.title("💬 Chat com Bedrock Agent")
 
-# Barra superior com botão único de reset (direita)
-col_left, col_right = st.columns([1, 0.22])
+col_left, col_right = st.columns([1, 0.2])
 with col_right:
     if st.button("🧹 Resetar sessão", key="reset_session_btn_top", help="Apaga o histórico e cria uma nova sessão de chat"):
         reset_session()
@@ -184,21 +190,17 @@ with col_right:
         except Exception:
             st.experimental_rerun()
 
-# Renderiza histórico
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+        st.markdown(m["content"]) 
 
-# Entrada do usuário
 prompt = st.chat_input("Escreva sua mensagem…")
 
 if prompt:
-    # Guarda a mensagem do usuário e mostra
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Espaço para a resposta do agente
     with st.chat_message("assistant"):
         placeholder = st.empty()
         streamed_text = ""
@@ -208,30 +210,20 @@ if prompt:
         if not streamed_text:
             placeholder.markdown("(sem conteúdo)")
         else:
-            # Se for a resposta de emissão de DAE, formata para um campo por linha
-            if ("Sua guia DAE foi gerada" in streamed_text) or ("mes_ano_dae:" in streamed_text):
+            if streamed_text.strip().startswith("Sua guia DAE foi gerada"):
                 formatted = format_dae_response(streamed_text)
-                extra_msg = (
-                    "**Sua guia DAE foi gerada com sucesso. "
-                    "A segunda via da CNH será emitida após a confirmação de pagamento do DAE "
-                    "e enviada para o endereço do condutor através do correio. "
-                    "Acompanhe a sua solicitação perguntando o status aqui. Dados da emissão:**"
-                )
-                box = placeholder.container()
-                box.markdown(extra_msg)
-                box.code(formatted)
-                # Salva no histórico com a frase + campos
-                streamed_text = (
-                    "Sua guia DAE foi gerada com sucesso. "
-                    "A segunda via da CNH será emitida após a confirmação de pagamento do DAE "
-                    "e enviada para o endereço do condutor através do correio. "
-                    "Acompanhe a sua solicitação perguntando o status aqui. Dados da emissão:\n"
-                    + formatted
-                )
+                placeholder.code(formatted)
 
-    # Salva a resposta completa no histórico (se houver)
     if streamed_text:
-        st.session_state.messages.append({"role": "assistant", "content": streamed_text})
+        # Se a resposta for de emissão de DAE, formata automaticamente
+        if streamed_text.strip().startswith("Sua guia DAE foi gerada"):
+            formatted = format_response(streamed_text)
+            st.session_state.messages.append({"role": "assistant", "content": formatted})
+            with st.chat_message("assistant"):
+                st.markdown(f"```
+{formatted}
+```")
+        else:
+            st.session_state.messages.append({"role": "assistant", "content": streamed_text})
 
-# Rodapé simples
 st.caption("Esta interface APENAS conversa com o Bedrock Agent configurado.")
