@@ -105,8 +105,7 @@ def format_dae_response(text: str) -> str:
     if anchor in text:
         text = text.split(anchor, 1)[1]
     # Normaliza: troca quebras de linha por espaço e colapsa espaços múltiplos
-    t = " ".join(text.replace("
-", " ").split())
+    t = " ".join(text.split())
     pattern = re.compile(r"([A-Za-z_]+):")
     matches = list(pattern.finditer(t))
     lines = []
