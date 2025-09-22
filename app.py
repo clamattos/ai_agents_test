@@ -796,7 +796,7 @@ def main():
             st.session_state.current_step = 'welcome'
             st.rerun()
         
-        if (send_clicked or st.session_state.get('auto_send', False)) and user_input:
+        if send_clicked and user_input:
             # Adicionar mensagem do usuário
             st.session_state.messages.append({"role": "user", "content": user_input})
             
@@ -809,7 +809,6 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
             
             # Limpar input e recarregar
-            st.session_state.auto_send = False
             st.rerun()
         
         st.markdown('</div>', unsafe_allow_html=True)
@@ -853,8 +852,15 @@ def main():
         
         for i, action in enumerate(st.session_state.quick_actions):
             if st.button(f"💬 {action}", key=f"quick_{i}", help="Clique para enviar esta mensagem"):
-                st.session_state.auto_send = True
-                st.session_state.user_input = action
+                # Adicionar mensagem do usuário diretamente
+                st.session_state.messages.append({"role": "user", "content": action})
+                
+                # Processar com o agente
+                with st.spinner("Assistente está digitando..."):
+                    response = st.session_state.agent.process_message(action)
+                
+                # Adicionar resposta do assistente
+                st.session_state.messages.append({"role": "assistant", "content": response})
                 st.rerun()
         
         # Histórico de conversas
