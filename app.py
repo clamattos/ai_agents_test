@@ -436,8 +436,33 @@ class BedrockAgent:
     
     
     def _handle_general_request(self, message: str) -> str:
-        # O agente já sabe tudo pelo system prompt - apenas retornar resposta padrão
-        return "Olá! Como posso ajudá-lo hoje?"
+        # O agente já sabe tudo pelo system prompt - processar a mensagem
+        user_message_lower = message.lower()
+        
+        if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
+            return """Claro! Para emissão do documento, preciso de algumas informações:
+
+**Por favor, me informe:**
+- Nome completo
+- CPF (11 dígitos, apenas números)
+- Data de nascimento (formato DD/MM/AAAA)
+- Nome da mãe
+
+Pode me informar esses dados?"""
+        elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
+            return """Para consultar o status da sua solicitação, preciso de:
+        
+- CPF (11 dígitos)
+- Data de nascimento (formato DD/MM/AAAA)
+
+Pode me informar esses dados?"""
+        else:
+            return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
+
+🚗 **Solicitar segunda via** de CNH, PPD ou ACC
+📋 **Consultar status** da sua solicitação em andamento
+
+Como posso ajudá-lo hoje?"""
     
     def get_welcome_message(self) -> str:
         """Retorna a mensagem de boas-vindas inicial"""
@@ -507,7 +532,9 @@ Obrigado por usar nossos serviços! 🚗"""
 
 # Interface principal
 def main():
-    # Sem cabeçalho - interface mais limpa
+    # Título principal
+    st.title("🚗 CET-MG - Assistente Virtual")
+    st.markdown("---")
     
     # Inicializar o agente
     if 'agent' not in st.session_state:
@@ -524,9 +551,6 @@ def main():
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        # Container do chat
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        
         # Exibir histórico de mensagens
         for message in st.session_state.messages:
             if message["role"] == "user":
@@ -548,8 +572,6 @@ def main():
                     {message["content"]}
                 </div>
                 """, unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
         
         # Input area - sem container branco
         col_input, col_clear = st.columns([5, 1])
