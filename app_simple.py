@@ -191,9 +191,11 @@ if prompt:
             # Se for a resposta de emissão de DAE, formata para um campo por linha
             if ("Sua guia DAE foi gerada" in streamed_text) or ("mes_ano_dae:" in streamed_text):
                 formatted = format_dae_response(streamed_text)
+                # Mostra a frase inicial + os campos
+                placeholder.markdown("**Sua guia DAE foi gerada com sucesso. A segunda via da CNH sera emitida apos a confirmacao de pagamento do DAE e enviada para o endereco do condutor atraves do correio. Acompanhe a sua solicitacao perguntando o status aqui. Dados da emissão:**")
                 placeholder.code(formatted)
-                # substitui o texto a ser salvo no histórico pela versão formatada
-                streamed_text = f"Sua guia DAE foi gerada/ {formatted}"
+                # Salva no histórico com a frase + campos
+                streamed_text = "Sua guia DAE foi gerada com sucesso. A segunda via da CNH sera emitida apos a confirmacao de pagamento do DAE e enviada para o endereco do condutor atraves do correio. Acompanhe a sua solicitacao perguntando o status aqui. Dados da emissão:\n" + formatted
 
     # Salva a resposta completa no histórico (se houver)
     if streamed_text:
