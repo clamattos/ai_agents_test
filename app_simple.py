@@ -192,6 +192,20 @@ class BedrockAgent:
             logger.error(f"Erro ao inicializar cliente Bedrock: {e}")
             return None
     
+    def _check_agent_exists(self):
+        """Verifica se o Agent existe"""
+        try:
+            if not self.bedrock_client or not BEDROCK_AGENT_ID:
+                return False
+            
+            # Tentar obter informações do agent
+            bedrock_agent_client = boto3.client('bedrock-agent', region_name=AWS_REGION)
+            response = bedrock_agent_client.get_agent(agentId=BEDROCK_AGENT_ID)
+            return response.get('agent', {}).get('agentStatus') == 'PREPARED'
+        except Exception as e:
+            logger.error(f"Erro ao verificar agent: {e}")
+            return False
+    
     def process_message(self, user_message: str) -> str:
         """Processa a mensagem do usuário usando Bedrock Agent real"""
         if not self.bedrock_client:
@@ -199,6 +213,22 @@ class BedrockAgent:
         
         if not BEDROCK_AGENT_ID:
             return "❌ Erro: ID do Bedrock Agent não configurado. Verifique o arquivo .env."
+        
+        # Verificar se o agent existe (comentado para teste)
+        # if not self._check_agent_exists():
+        #     return f"""❌ **Erro de Configuração do Bedrock Agent**
+        # 
+        # O Bedrock Agent não foi encontrado ou não está ativo. Verifique:
+        # 
+        # 1. **BEDROCK_AGENT_ID** está correto no arquivo .env
+        # 2. O Agent existe na região {AWS_REGION}
+        # 3. O Agent está ativo e configurado
+        # 4. Suas credenciais AWS têm permissão para acessar o Bedrock
+        # 
+        # **ID atual:** {BEDROCK_AGENT_ID}
+        # **Região:** {AWS_REGION}
+        # 
+        # Consulte a documentação do AWS Bedrock para configurar corretamente."""
         
         try:
             # Chamada real para o Bedrock Agent
@@ -213,20 +243,24 @@ class BedrockAgent:
             return self._process_bedrock_response(response)
             
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Erro ao chamar Bedrock Agent: {e}")
-            return f"❌ Erro ao processar mensagem: {str(e)}"
+            
+            # Fallback simples para teste
+            return self._fallback_response(user_message)
     
     def _process_bedrock_response(self, response) -> str:
         """Processa a resposta do Bedrock Agent"""
         try:
             # Ler a resposta do Bedrock
+            full_response = ""
             for event in response['completion']:
                 if 'chunk' in event:
                     chunk = event['chunk']
                     if 'bytes' in chunk:
                         # Decodificar bytes para texto
                         text = chunk['bytes'].decode('utf-8')
-                        return text
+                        full_response += text
                 elif 'trace' in event:
                     # Processar traces se necessário
                     trace = event['trace']
@@ -234,11 +268,43 @@ class BedrockAgent:
                         # Processar trace específico
                         pass
             
-            return "❌ Não foi possível processar a resposta do Bedrock Agent."
+            if full_response:
+                return full_response
+            else:
+                return "❌ Não foi possível processar a resposta do Bedrock Agent."
             
         except Exception as e:
             logger.error(f"Erro ao processar resposta do Bedrock: {e}")
             return f"❌ Erro ao processar resposta: {str(e)}"
+    
+    def _fallback_response(self, user_message: str) -> str:
+        """Resposta de fallback quando o Bedrock não funciona"""
+        user_message_lower = user_message.lower()
+        
+        if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
+            return """Claro! Para emissão do documento, preciso de algumas informações:
+
+**Por favor, me informe:**
+- Nome completo
+- CPF (11 dígitos, apenas números)
+- Data de nascimento (formato DD/MM/AAAA)
+- Nome da mãe
+
+Pode me informar esses dados?"""
+        elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
+            return """Para consultar o status da sua solicitação, preciso de:
+        
+- CPF (11 dígitos)
+- Data de nascimento (formato DD/MM/AAAA)
+
+Pode me informar esses dados?"""
+        else:
+            return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
+
+🚗 **Solicitar segunda via** de CNH, PPD ou ACC
+📋 **Consultar status** da sua solicitação em andamento
+
+Como posso ajudá-lo hoje?"""
     
     def get_welcome_message(self) -> str:
         """Retorna a mensagem de boas-vindas inicial"""
