@@ -32,23 +32,18 @@ client = get_bedrock_agent_runtime()
 # =========================
 
 def ensure_session():
-    """Garante um session_id estável por sessão de navegador e histórico de chat."""
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
     if "messages" not in st.session_state:
-        st.session_state.messages = []  # [{"role": "user|assistant", "content": str}]
+        st.session_state.messages = []
 
 
 def reset_session():
-    """Apaga a sessão atual e inicia uma nova (até o usuário recarregar a página)."""
     st.session_state.session_id = str(uuid.uuid4())
     st.session_state.messages = []
 
 
 def stream_agent_response(user_text: str):
-    """Invoca o Agent e faz streaming do texto de resposta.
-    A interface APENAS conversa com o Agent (sem chamar outras APIs diretamente).
-    """
     if not AGENT_ID or not AGENT_ALIAS_ID:
         st.error("Defina BEDROCK_AGENT_ID e BEDROCK_AGENT_ALIAS_ID em st.secrets ou variáveis de ambiente.")
         return ""
@@ -78,31 +73,59 @@ def stream_agent_response(user_text: str):
         st.error(err)
         yield "\n" + err
 
+
+def format_response(raw_text: str) -> str:
+    """Formata retorno da emissão de DAE: mostra apenas campos preenchidos, um por linha."""
+    if not raw_text:
+        return ""
+    parts = raw_text.split()
+    buffer, linhas = [], []
+    for part in parts:
+        if ":" in part:
+            if buffer:
+                linha = " ".join(buffer).strip()
+                if not linha.endswith(":"):
+                    linhas.append(linha)
+                buffer = []
+        buffer.append(part)
+    if buffer:
+        linha = " ".join(buffer).strip()
+        if not linha.endswith(":"):
+            linhas.append(linha)
+    return "\n".join(linhas)
+
 # =========================
-# UI – Sidebar (informativo)
+# UI – Sidebar
 # =========================
+def format_dae_response(text: str) -> str:
+    """Formata o retorno da emissão da DAE para 'um campo por linha', exibindo apenas campos com valor."""
+    if not text:
+        return text
+    anchor = "Dados da emissão:"
+    if anchor in text:
+        text = text.split(anchor, 1)[1]
+    t = " ".join(text.replace("
+", " ").split())
+    pattern = re.compile(r"([A-Za-z_]+):")
+    matches = list(pattern.finditer(t))
+    lines = []
+    for i, m in enumerate(matches):
+        key = m.group(1)
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(t)
+        value = t[start:end].strip()
+        if value:
+            lines.append(f"{key}: {value}")
+    return "
+".join(lines)
+
 with st.sidebar:
     st.header("Sobre o sistema")
-    st.write("""
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent commodo
-        suscipit lorem, sit amet egestas purus vulputate eget. Integer quis nisl
-        a erat facilisis tempus.
-        """)
-
+    st.write("Lorem ipsum dolor sit amet, consectetur adipiscing elit...")
     st.header("Como usar")
-    st.write("""
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam vitae
-        feugiat turpis. Sed posuere, dolor et faucibus pharetra, diam nisl
-        rhoncus odio, eu lacinia lorem odio non odio.
-        """)
-
+    st.write("Lorem ipsum dolor sit amet, consectetur adipiscing elit...")
     st.header("Atalhos rápidos")
-    st.write("""
-        • Lorem ipsum dolor sit amet.\n
-        • Consectetur adipiscing elit.\n
-        • Integer quis nisl a erat.\n
-        • Sed posuere dolor et faucibus.
-        """)
+    st.write("• Lorem ipsum dolor sit amet.\n• Consectetur adipiscing elit.\n• Integer quis nisl a erat.")
 
 # =========================
 # UI – Área principal (chat estilo ChatGPT)
@@ -111,7 +134,6 @@ ensure_session()
 
 st.title("💬 Chat com Bedrock Agent")
 
-# Barra superior com botão único de reset (direita)
 col_left, col_right = st.columns([1, 0.2])
 with col_right:
     if st.button("🧹 Resetar sessão", key="reset_session_btn_top", help="Apaga o histórico e cria uma nova sessão de chat"):
@@ -122,12 +144,10 @@ with col_right:
         except Exception:
             st.experimental_rerun()
 
-# Renderiza histórico
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"]) 
 
-# Entrada do usuário
 prompt = st.chat_input("Escreva sua mensagem…")
 
 if prompt:
@@ -143,9 +163,23 @@ if prompt:
             placeholder.markdown(streamed_text)
         if not streamed_text:
             placeholder.markdown("(sem conteúdo)")
+        else:
+            if streamed_text.strip().startswith("Sua guia DAE foi gerada"):
+                formatted = format_dae_response(streamed_text)
+                placeholder.markdown(f"```
+{formatted}
+```")
 
     if streamed_text:
-        st.session_state.messages.append({"role": "assistant", "content": streamed_text})
+        # Se a resposta for de emissão de DAE, formata automaticamente
+        if streamed_text.strip().startswith("Sua guia DAE foi gerada"):
+            formatted = format_response(streamed_text)
+            st.session_state.messages.append({"role": "assistant", "content": formatted})
+            with st.chat_message("assistant"):
+                st.markdown(f"```
+{formatted}
+```")
+        else:
+            st.session_state.messages.append({"role": "assistant", "content": streamed_text})
 
-# Rodapé simples
 st.caption("Esta interface APENAS conversa com o Bedrock Agent configurado.")
