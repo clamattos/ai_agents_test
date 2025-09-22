@@ -39,7 +39,14 @@ def ensure_session():
         st.session_state.messages = []  # [{"role": "user|assistant", "content": str}]
 
 
-def stream_agent_response(user_text: str):
+def reset_session():
+    """Apaga a sessão atual e inicia uma nova (até o usuário recarregar a página)."""
+    st.session_state.session_id = str(uuid.uuid4())
+    st.session_state.messages = []
+
+
+
+def stream_agent_response(user_text: str):(user_text: str):
     """Invoca o Agent e faz streaming do texto de resposta.
     A interface APENAS conversa com o Agent (sem chamar outras APIs diretamente).
     """
@@ -116,6 +123,17 @@ st.title("💬 Chat com Bedrock Agent")
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"]) 
+
+# Controles rápidos (fica logo acima da barra de pergunta)
+cc1, cc2 = st.columns([0.8, 0.2])
+with cc2:
+    if st.button("🧹 Resetar sessão", help="Apaga o histórico e cria uma nova sessão de chat"):
+        reset_session()
+        st.toast("Sessão reiniciada.")
+        try:
+            st.rerun()
+        except Exception:
+            st.experimental_rerun()
 
 # Entrada do usuário
 prompt = st.chat_input("Escreva sua mensagem…")
