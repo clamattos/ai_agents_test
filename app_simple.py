@@ -45,8 +45,7 @@ def reset_session():
     st.session_state.messages = []
 
 
-
-def stream_agent_response(user_text: str):(user_text: str):
+def stream_agent_response(user_text: str):
     """Invoca o Agent e faz streaming do texto de resposta.
     A interface APENAS conversa com o Agent (sem chamar outras APIs diretamente).
     """
@@ -63,7 +62,6 @@ def stream_agent_response(user_text: str):(user_text: str):
         )
 
         full_text = ""
-        # A API retorna um EventStream em response["completion"], que contém 'chunk' com bytes.
         for event in response.get("completion", []):
             if "chunk" in event:
                 part = event["chunk"].get("bytes", b"").decode("utf-8", errors="ignore")
@@ -71,7 +69,7 @@ def stream_agent_response(user_text: str):(user_text: str):
                 yield part
         return full_text
 
-    except client.exceptions.ThrottlingException as e:
+    except client.exceptions.ThrottlingException:
         msg = "O serviço está ocupado (Throttling). Tente novamente em alguns segundos."
         st.warning(msg)
         yield "\n" + msg
@@ -80,38 +78,31 @@ def stream_agent_response(user_text: str):(user_text: str):
         st.error(err)
         yield "\n" + err
 
-
 # =========================
 # UI – Sidebar (informativo)
 # =========================
 with st.sidebar:
     st.header("Sobre o sistema")
-    st.write(
-        """
+    st.write("""
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent commodo
         suscipit lorem, sit amet egestas purus vulputate eget. Integer quis nisl
         a erat facilisis tempus.
-        """
-    )
+        """)
 
     st.header("Como usar")
-    st.write(
-        """
+    st.write("""
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam vitae
         feugiat turpis. Sed posuere, dolor et faucibus pharetra, diam nisl
         rhoncus odio, eu lacinia lorem odio non odio.
-        """
-    )
+        """)
 
     st.header("Atalhos rápidos")
-    st.write(
-        """
+    st.write("""
         • Lorem ipsum dolor sit amet.\n
         • Consectetur adipiscing elit.\n
         • Integer quis nisl a erat.\n
         • Sed posuere dolor et faucibus.
-        """
-    )
+        """)
 
 # =========================
 # UI – Área principal (chat estilo ChatGPT)
@@ -139,12 +130,10 @@ with cc2:
 prompt = st.chat_input("Escreva sua mensagem…")
 
 if prompt:
-    # Guarda a mensagem do usuário e mostra
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Espaço para a resposta do agente
     with st.chat_message("assistant"):
         placeholder = st.empty()
         streamed_text = ""
@@ -154,7 +143,6 @@ if prompt:
         if not streamed_text:
             placeholder.markdown("(sem conteúdo)")
 
-    # Salva a resposta completa no histórico (se houver)
     if streamed_text:
         st.session_state.messages.append({"role": "assistant", "content": streamed_text})
 
