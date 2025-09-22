@@ -193,7 +193,7 @@ if prompt:
                 formatted = format_dae_response(streamed_text)
                 placeholder.code(formatted)
                 # substitui o texto a ser salvo no histórico pela versão formatada
-                streamed_text = formatted
+                streamed_text = f"Sua guia DAE foi gerada/ {formatted}"
 
     # Salva a resposta completa no histórico (se houver)
     if streamed_text:
