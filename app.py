@@ -267,7 +267,20 @@ class BedrockAgent:
         """Processa a mensagem do usuário e retorna a resposta do assistente"""
         user_message_lower = user_message.lower()
         
-        # Detectar intenção
+        # Verificar se já temos dados confirmados
+        if st.session_state.get('current_step') == 'data_confirmed':
+            if any(word in user_message_lower for word in ['sim', 'gerar', 'dae', 'guia', 'pagamento']):
+                return self._generate_dae_guide()
+            elif any(word in user_message_lower for word in ['não', 'alterar', 'mudar']):
+                return "Entendi. Para alterar os dados, use o formulário ao lado ou me informe os novos dados."
+            else:
+                return "Deseja gerar a guia DAE para pagamento ou alterar algum dado?"
+        
+        # Verificar se a mensagem contém dados do usuário primeiro
+        if self._extract_user_data(user_message):
+            return self._process_user_data(user_message)
+        
+        # Detectar intenção apenas se não contém dados
         if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
             return self._handle_second_copy_request(user_message)
         elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
@@ -276,10 +289,6 @@ class BedrockAgent:
             return self._handle_general_request(user_message)
     
     def _handle_second_copy_request(self, message: str) -> str:
-        # Verificar se a mensagem contém dados do usuário
-        if self._extract_user_data(message):
-            return self._process_user_data(message)
-        
         # Se não contém dados, pedir as informações
         return """Claro! Para emissão do documento, preciso de algumas informações:
         
@@ -341,6 +350,7 @@ Pode me informar esses dados?"""
                 
                 if result.get("status") == 200:
                     st.session_state.user_data = result["data"]
+                    st.session_state.current_step = 'data_confirmed'
                     return f"""✅ Dados confirmados com sucesso!
 
 **Seus dados cadastrados:**
@@ -388,6 +398,54 @@ Como posso ajudá-lo hoje?"""
 📋 **Consultar status** da sua solicitação em andamento
 
 Como posso ajudá-lo hoje?"""
+    
+    def _generate_dae_guide(self) -> str:
+        """Gera a guia DAE para pagamento"""
+        if not st.session_state.get('user_data'):
+            return "❌ Erro: Dados do usuário não encontrados. Por favor, forneça os dados novamente."
+        
+        # Usar dados já confirmados
+        user_data = st.session_state.user_data['retornoNSDGXS02']
+        
+        # Preparar payload para gerar guia
+        payload = {
+            "flow_id": st.session_state.user_data.get('flow_id'),
+            "cpf": user_data['cpf'],
+            "nome_condutor": user_data.get('nome_condutor', 'CONDUTOR TESTE'),
+            "data_nascimento": "01/01/2000",  # Data padrão para teste
+            "nome_mae": "TESTE",
+            "codigo_municipio_condutor": user_data['codigo_municipio_condutor'],
+            "ddd_celular": user_data['ddd_celular'],
+            "numero_celular": user_data['numero_celular'],
+            "email": user_data['email'],
+            "codigo_taxa": user_data['codigo_taxa'],
+            "codigo_servico": user_data['codigo_servico'],
+            "numero_cnh": user_data['numero_cnh'],
+            "numero_ip_micro": "192.168.1.1"
+        }
+        
+        result = self.backend.exibir_opcoes_pagamento(payload)
+        
+        if result.get("status") == 200:
+            st.session_state.current_step = 'dae_generated'
+            data = result['data']['retornoNsdgx414']
+            return f"""✅ Guia DAE gerada com sucesso!
+
+**Dados da Guia:**
+- **Valor:** R$ {data['valor_taxa']}
+- **Vencimento:** {data['data_vencimento']}
+- **Linha Digitável:** {data['linha_digitavel']}
+- **Código de Barras:** {data['codigo_barras']}
+- **Nosso Número:** {data['nosso_numero']}
+
+**Instruções:**
+- Pague em qualquer banco ou casa lotérica
+- Use o código de barras ou linha digitável
+- A CNH será enviada para o endereço cadastrado
+
+Obrigado por usar nossos serviços! 🚗"""
+        else:
+            return f"❌ Erro ao gerar guia: {result.get('error', 'Erro desconhecido')}"
 
 # Interface principal
 def main():
