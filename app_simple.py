@@ -67,7 +67,7 @@ def stream_agent_response(user_text: str):
                 yield part
         return full_text
 
-    except getattr(client, "exceptions", object()).__dict__.get("ThrottlingException", Exception) as _e:  # robust fallback
+    except client.exceptions.ThrottlingException:
         msg = "O serviço está ocupado (Throttling). Tente novamente em alguns segundos."
         st.warning(msg)
         yield "\n" + msg
@@ -191,11 +191,24 @@ if prompt:
             # Se for a resposta de emissão de DAE, formata para um campo por linha
             if ("Sua guia DAE foi gerada" in streamed_text) or ("mes_ano_dae:" in streamed_text):
                 formatted = format_dae_response(streamed_text)
-                # Mostra a frase inicial + os campos
-                placeholder.markdown("**Sua guia DAE foi gerada com sucesso. A segunda via da CNH sera emitida apos a confirmacao de pagamento do DAE e enviada para o endereco do condutor atraves do correio. Acompanhe a sua solicitacao perguntando o status aqui. Dados da emissão:**")
-                placeholder.code(formatted)
+                # Mensagem extra antes dos campos
+                extra_msg = (
+                    "**Sua guia DAE foi gerada com sucesso. "
+                    "A segunda via da CNH sera emitida apos a confirmacao de pagamento do DAE "
+                    "e enviada para o endereco do condutor atraves do correio. "
+                    "Acompanhe a sua solicitacao perguntando o status aqui. Dados da emissão:**"
+                )
+                box = placeholder.container()
+                box.markdown(extra_msg)
+                box.code(formatted)
                 # Salva no histórico com a frase + campos
-                streamed_text = "Sua guia DAE foi gerada com sucesso. A segunda via da CNH sera emitida apos a confirmacao de pagamento do DAE e enviada para o endereco do condutor atraves do correio. Acompanhe a sua solicitacao perguntando o status aqui. Dados da emissão:\n" + formatted
+                streamed_text = (
+                    "Sua guia DAE foi gerada com sucesso. "
+                    "A segunda via da CNH sera emitida apos a confirmacao de pagamento do DAE "
+                    "e enviada para o endereco do condutor atraves do correio. "
+                    "Acompanhe a sua solicitacao perguntando o status aqui. Dados da emissão:\n"
+                    + formatted
+                )
 
     # Salva a resposta completa no histórico (se houver)
     if streamed_text:
