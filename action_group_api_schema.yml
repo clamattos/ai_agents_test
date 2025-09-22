@@ -1,0 +1,576 @@
+openapi: 3.0.1
+info:
+  title: CET-MG CNH Agent API
+  version: "1.0.0"
+  description: |
+    API do Action Group do agente CET-MG (2ª via, DAE e status da CNH/PPD/ACC).
+    Operações: confirmar-dados, exibir-opcoes-pagamento, exibir-dados.
+servers:
+  - url: https://{restapi_id}.execute-api.{region}.amazonaws.com/{stage}
+    variables:
+      restapi_id: { default: "REPLACE_AT_DEPLOY" }
+      region: { default: "sa-east-1" }
+      stage: { default: "mock" }
+
+paths:
+  /confirmar-dados:
+    description: "Valida dados do condutor para solicitar 2ª via (CNH/PPD/ACC) e retorna dados-chave para emissão da guia."
+    post:
+      operationId: confirmar-dados
+      summary: "Validar dados para 2ª via (CNH/PPD/ACC)"
+      description: "Passo A do fluxo de 2ª via."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmarDadosInput'
+      responses:
+        "200":
+          description: "Dados confirmados com sucesso."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmarDadosOutput'
+        "422":
+          description: "Campo faltante ou inválido (pedir apenas o que faltar)."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroValidacao'
+      x-amazon-apigateway-integration:
+        type: mock
+        passthroughBehavior: when_no_templates
+        requestTemplates:
+          application/json: |
+            #set($context.requestOverride.header.X-Action = "confirmar-dados")
+            {
+              "statusCode": 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseTemplates:
+              application/json: |
+                #set($inputRoot = $util.parseJson($input.body))
+                {
+                  "flow_id": "0a84e30c-3c9c-4f1c-9a5c-5d9a3b2d7f1a",
+                  "retornoNSDGXS02": {
+                    "codigo_retorno": 0,
+                    "mensagem_retorno": "OK",
+                    "cpf": "$input.json('$.cpf')",
+                    "numero_cnh": "12345678900",
+                    "numero_pgu": "99887766",
+                    "numero_identidade": "MG1234567",
+                    "orgao_expedidor_identidade": "SSP",
+                    "uf_identidade": "MG",
+                    "endereco_condutor": "Av. Afonso Pena",
+                    "numero_endereco_condutor": "1000",
+                    "complemento_endereco_condutor": "Sala 101",
+                    "bairro_endereco_condutor": "Centro",
+                    "codigo_municipio_condutor": 4123,
+                    "nome_municipio_condutor": "BELO HORIZONTE",
+                    "sigla_uf_municipio_condutor": "MG",
+                    "numero_cep_endereco_condutor": "30130008",
+                    "data_primeira_habilitacao": "2010-06-15",
+                    "data_validade_exame": "2027-05-23",
+                    "codigo_servico": 123,
+                    "codigo_taxa": 25,
+                    "flag_escolhe_entrega": 1,
+                    "flag_tipo_autorizacao": "CNH",
+                    "ddd_celular": 31,
+                    "numero_celular": 999999999,
+                    "email": "condutor@example.com"
+                  }
+                }
+          "422":
+            selectionPattern: ".*__force422__.*"
+            statusCode: "422"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Ocorreu um erro na validação dos dados",
+                  "code": 422,
+                  "errors": {
+                    "cpf": { "_required": "O campo \"CPF\" é de preenchimento obrigatório" }
+                  }
+                }
+
+  /exibir-opcoes-pagamento:
+    post:
+      operationId: exibir-opcoes-pagamento
+      summary: "Emitir guia DAE"
+      description: >
+        Use preferencialmente `flow_id` retornado por /confirmar-dados.
+        Se `flow_id` for informado, o backend carrega `codigo_taxa`, `codigo_servico`, `numero_cnh`, `cpf` etc.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmitirGuiaInput' }
+      responses:
+        "200":
+          description: "Guia DAE emitida com sucesso."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmitirGuiaOutput' }
+        "422":
+          description: "Campo faltante ou inválido (pedir apenas o que faltar)."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErroValidacao' }
+      x-amazon-apigateway-integration:
+        type: mock
+        passthroughBehavior: when_no_templates
+        requestTemplates:
+          application/json: |
+            #set($context.requestOverride.header.X-Action = "exibir-opcoes-pagamento")
+            {
+              "statusCode": 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseTemplates:
+              application/json: |
+                #set($inputRoot = $util.parseJson($input.body))
+                {
+                  "retornoNsdgxS2A": {
+                    "codigo_retorno": 0,
+                    "mensagem_retorno": "OK"
+                  },
+                  "retornoNsdgx414": {
+                    "codigo_erro": 0,
+                    "mensagem_erro": "",
+                    "codigo_tipo_contribuinte": "04",
+                    "codigo_municipio_ibge": "062",
+                    "descricao_municipio": "BELO HORIZONTE",
+                    "mes_ano_dae": "12/2024",
+                    "data_vencimento": "31/12/2024",
+                    "linha_digitavel": "85610000001 2 26710213241 7 23112252400 3 02194270789 0",
+                    "codigo_barras": "856100000012267102132417231122524003021942707890",
+                    "nosso_numero": "2524000219427",
+                    "nome_contribuinte": "CONDUTOR TESTE",
+                    "valor_taxa": "126,71",
+                    "quantidade_taxa": 1,
+                    "data_emissao": "20/12/2024",
+                    "cpf_contribuinte": "$input.json('$.cpf')",
+                    "numero_identificao_contribuinte": "12345678900",
+                    "sigla_uf_origem_contribuinte": "MG",
+                    "campo_mensagem_1": "EXPEDICAO DA 2a VIA DA HABILITACAO",
+                    "campo_mensagem_2": "NUM. CNH: 12345678900",
+                    "campo_mensagem_3": "Solicitação Segunda Via de CNH / PPD",
+                    "campo_mensagem_4": "",
+                    "campo_mensagem_5": "- A segunda via da CNH sera emitida apos a confirmacao de pagamento",
+                    "campo_mensagem_6": "do DAE e enviada para o endereco do condutor atraves do correio.",
+                    "campo_mensagem_7": "Acompanhe a sua solicitacao atraves do site www.detran.mg.gov.br",
+                    "campo_mensagem_8": "",
+                    "campo_mensagem_9": "",
+                    "campo_mensagem_10": "",
+                    "campo_mensagem_11": "",
+                    "campo_mensagem_12": "",
+                    "campo_mensagem_13": "Sr. Caixa,",
+                    "campo_mensagem_14": "Este documento deve ser recebido exclusivamente pela",
+                    "campo_mensagem_15": "leitura do codigo de barra ou linha digitavel",
+                    "campo_mensagem_16": "",
+                    "campo_mensagem_17": "Data Emissao: 20/12/2024",
+                    "campo_mensagem_18": "",
+                    "codigo_taxa": 25,
+                    "codigo_municipio": "4123"
+                  },
+                  "codigoBarras": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB..."
+                }
+          "422":
+            selectionPattern: ".*__force422__.*"
+            statusCode: "422"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Ocorreu um erro na validação dos dados",
+                  "code": 422,
+                  "errors": {
+                    "codigo_municipio_condutor": { "_required": "Informe o codigo do municipio (IBGE)" }
+                  }
+                }
+
+  /exibir-dados:
+    description: "Consulta o status da emissão/entrega da CNH do condutor."
+    post:
+      operationId: exibir-dados
+      summary: "Consultar status da emissão da CNH"
+      description: "Consultar dados da emissão da segunda via do CNH"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExibirDadosInput'
+      responses:
+        "200":
+          description: "Status retornado com sucesso."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExibirDadosOutput'
+        "422":
+          description: "Campo faltante ou inválido (pedir apenas o que faltar)."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErroValidacao'
+      x-amazon-apigateway-integration:
+        type: mock
+        passthroughBehavior: when_no_templates
+        requestTemplates:
+          application/json: |
+            #set($context.requestOverride.header.X-Action = "exibir-dados")
+            {
+              "statusCode": 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseTemplates:
+              application/json: |
+                #set($inputRoot = $util.parseJson($input.body))
+                {
+                  "cpf": "$input.json('$.cpf')",
+                  "numero_renach": "MG-123456789",
+                  "nome_condutor": "CONDUTOR TESTE",
+                  "numero_formulario_renach": "FORM-0001",
+                  "codigo_etapa": 4,
+                  "descricao_etapa": "Emissão concluída",
+                  "prazo": 0,
+                  "titulo_entrega": "Postado nos Correios",
+                  "data_entrega_lote": "2024-12-22",
+                  "titulo_hora_entrega": "Até 18h",
+                  "hora_entrega_lote": "18:00:00",
+                  "data_hora_status": "2024-12-20T15:30:00Z",
+                  "texto_ar_correio": "AR: 123456789BR",
+                  "numero_ar_correio": "123456789BR",
+                  "data_ar_correio": "2024-12-23",
+                  "situacao_cnh": "Emitida",
+                  "descricao_situacao_entrega": "Em trânsito",
+                  "codigo_retorno_binco": 0,
+                  "descricao_retorno_binco": "Sem restrições",
+                  "data_retorno_binco": "2024-12-19",
+                  "descricao_situacao_cnh": "Regular",
+                  "texto_livre_rejeicao": "",
+                  "titulo_motivo_devolucao": "",
+                  "titulo_motivo_baixa": "",
+                  "titulo_motivo_rejeicao": "",
+                  "quantidade_motivo_rejeicao": 0,
+                  "codigo_rejeicao": [],
+                  "motivo_rejeicao": [],
+                  "descricao_acao": "Acompanhar entrega pelo AR"
+                }
+          "422":
+            selectionPattern: ".*__force422__.*"
+            statusCode: "422"
+            responseTemplates:
+              application/json: |
+                {
+                  "message": "Ocorreu um erro na validação dos dados",
+                  "code": 422,
+                  "errors": {
+                    "cpf": { "_required": "O campo \"CPF\" é de preenchimento obrigatório" }
+                  }
+                }
+
+components:
+  schemas:
+
+    ConfirmarDadosInput:
+      type: object
+      required: [cpf, nome_condutor, data_nascimento, nome_mae]
+      properties:
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+        nome_condutor:
+          type: string
+        data_nascimento:
+          type: string
+          format: date
+          example: "1990-05-23"
+        nome_mae:
+          type: string
+
+    ConfirmarDadosOutput:
+      type: object
+      required: [retornoNSDGXS02]   # <- PATCH
+      properties:
+        flow_id:
+          type: string
+          example: "0a84e30c-3c9c-4f1c-9a5c-5d9a3b2d7f1a"
+        retornoNSDGXS02:
+          type: object
+          required:   # <- PATCH
+            - codigo_retorno
+            - mensagem_retorno
+            - cpf
+            - numero_cnh
+            - numero_pgu
+            - numero_identidade
+            - orgao_expedidor_identidade
+            - uf_identidade
+            - endereco_condutor
+            - numero_endereco_condutor
+            - complemento_endereco_condutor
+            - bairro_endereco_condutor
+            - codigo_municipio_condutor
+            - nome_municipio_condutor
+            - sigla_uf_municipio_condutor
+            - numero_cep_endereco_condutor
+            - data_primeira_habilitacao
+            - data_validade_exame
+            - codigo_servico
+            - codigo_taxa
+            - flag_escolhe_entrega
+            - flag_tipo_autorizacao
+            - ddd_celular
+            - numero_celular
+            - email
+          properties:
+            codigo_retorno: { type: integer }
+            mensagem_retorno: { type: string }
+            cpf: { type: string }
+            numero_cnh: { type: string }
+            numero_pgu: { type: string }
+            numero_identidade: { type: string }
+            orgao_expedidor_identidade: { type: string }
+            uf_identidade: { type: string }
+            endereco_condutor: { type: string }
+            numero_endereco_condutor: { type: string }
+            complemento_endereco_condutor: { type: string }
+            bairro_endereco_condutor: { type: string }
+            codigo_municipio_condutor: { type: integer }
+            nome_municipio_condutor: { type: string }
+            sigla_uf_municipio_condutor: { type: string }
+            numero_cep_endereco_condutor: { type: string }
+            data_primeira_habilitacao: { type: string, format: date }
+            data_validade_exame: { type: string, format: date }
+            codigo_servico: { type: integer }
+            codigo_taxa: { type: integer }
+            flag_escolhe_entrega: { type: integer }
+            flag_tipo_autorizacao: { type: string }
+            ddd_celular: { type: integer }
+            numero_celular: { type: integer }
+            email: { type: string, format: email }
+
+    EmitirGuiaInput:
+      type: object
+      required:
+        [cpf, nome_condutor, data_nascimento, nome_mae,
+         codigo_municipio_condutor, flag_tipo_autorizacao_cnh,
+         ddd_celular, numero_celular, email,
+         codigo_taxa, codigo_servico, numero_cnh, numero_ip_micro]
+      properties:
+        flow_id: { type: string }
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+        nome_condutor: { type: string }
+        data_nascimento: { type: string, format: date, example: "1990-05-23" }
+        nome_mae: { type: string }
+        codigo_municipio_condutor: { type: integer }
+        flag_tipo_autorizacao_cnh: { type: integer, description: "1=CNH, 2=PPD, 3=ACC (exemplo)" }
+        ddd_celular: { type: integer }
+        numero_celular: { type: integer }
+        email: { type: string, format: email }
+        codigo_taxa: { type: integer }
+        codigo_servico: { type: integer }
+        numero_cnh: { type: string }
+        numero_ip_micro: { type: string }
+
+    EmitirGuiaOutput:
+      type: object
+      required: [retornoNsdgxS2A, retornoNsdgx414, codigoBarras]   # <- PATCH
+      properties:
+        retornoNsdgxS2A:
+          type: object
+          required: [codigo_retorno, mensagem_retorno]             # <- PATCH
+          properties:
+            codigo_retorno: { type: integer }
+            mensagem_retorno: { type: string }
+        retornoNsdgx414:
+          type: object
+          required:   # <- PATCH
+            - codigo_erro
+            - mensagem_erro
+            - codigo_tipo_contribuinte
+            - codigo_municipio_ibge
+            - descricao_municipio
+            - mes_ano_dae
+            - data_vencimento
+            - linha_digitavel
+            - codigo_barras
+            - nosso_numero
+            - nome_contribuinte
+            - valor_taxa
+            - quantidade_taxa
+            - data_emissao
+            - cpf_contribuinte
+            - numero_identificao_contribuinte
+            - sigla_uf_origem_contribuinte
+            - campo_mensagem_1
+            - campo_mensagem_2
+            - campo_mensagem_3
+            - campo_mensagem_4
+            - campo_mensagem_5
+            - campo_mensagem_6
+            - campo_mensagem_7
+            - campo_mensagem_8
+            - campo_mensagem_9
+            - campo_mensagem_10
+            - campo_mensagem_11
+            - campo_mensagem_12
+            - campo_mensagem_13
+            - campo_mensagem_14
+            - campo_mensagem_15
+            - campo_mensagem_16
+            - campo_mensagem_17
+            - campo_mensagem_18
+            - codigo_taxa
+            - codigo_municipio
+          properties:
+            codigo_erro: { type: integer }
+            mensagem_erro: { type: string }
+            codigo_tipo_contribuinte: { type: string, example: "04" }
+            codigo_municipio_ibge: { type: string, example: "062" }
+            descricao_municipio: { type: string, example: "BELO HORIZONTE" }
+            mes_ano_dae: { type: string, example: "12/2024" }
+            data_vencimento: { type: string, example: "31/12/2024" }
+            linha_digitavel: { type: string }
+            codigo_barras: { type: string, description: "Código de barras (44 dígitos)." }
+            nosso_numero: { type: string, example: "2524000219427" }
+            nome_contribuinte: { type: string }
+            valor_taxa: { type: string, example: "126,71" }
+            quantidade_taxa: { type: number, format: double }
+            data_emissao: { type: string, example: "20/12/2024" }
+            cpf_contribuinte: { type: string }
+            numero_identificao_contribuinte: { type: string }
+            sigla_uf_origem_contribuinte: { type: string, example: "MG" }
+            campo_mensagem_1: { type: string }
+            campo_mensagem_2: { type: string }
+            campo_mensagem_3: { type: string }
+            campo_mensagem_4: { type: string }
+            campo_mensagem_5: { type: string }
+            campo_mensagem_6: { type: string }
+            campo_mensagem_7: { type: string }
+            campo_mensagem_8: { type: string }
+            campo_mensagem_9: { type: string }
+            campo_mensagem_10: { type: string }
+            campo_mensagem_11: { type: string }
+            campo_mensagem_12: { type: string }
+            campo_mensagem_13: { type: string }
+            campo_mensagem_14: { type: string }
+            campo_mensagem_15: { type: string }
+            campo_mensagem_16: { type: string }
+            campo_mensagem_17: { type: string }
+            campo_mensagem_18: { type: string }
+            codigo_taxa: { type: integer, example: 25 }
+            codigo_municipio: { type: string, example: "4123" }
+        codigoBarras:
+          type: string
+          description: "Imagem do código de barras em base64 (PNG/JPEG)."
+
+    ExibirDadosInput:
+      type: object
+      required: [cpf, data_nascimento]
+      properties:
+        cpf:
+          type: string
+          pattern: '^\d{11}$'
+        data_nascimento:
+          type: string
+          format: date
+          example: "1990-05-23"
+
+    ExibirDadosOutput:
+      type: object
+      required:   # <- PATCH
+        - cpf
+        - numero_renach
+        - nome_condutor
+        - numero_formulario_renach
+        - codigo_etapa
+        - descricao_etapa
+        - prazo
+        - titulo_entrega
+        - data_entrega_lote
+        - titulo_hora_entrega
+        - hora_entrega_lote
+        - data_hora_status
+        - texto_ar_correio
+        - numero_ar_correio
+        - data_ar_correio
+        - situacao_cnh
+        - descricao_situacao_entrega
+        - codigo_retorno_binco
+        - descricao_retorno_binco
+        - data_retorno_binco
+        - descricao_situacao_cnh
+        - texto_livre_rejeicao
+        - titulo_motivo_devolucao
+        - titulo_motivo_baixa
+        - titulo_motivo_rejeicao
+        - quantidade_motivo_rejeicao
+        - codigo_rejeicao
+        - motivo_rejeicao
+        - descricao_acao
+      properties:
+        cpf: { type: string }
+        numero_renach: { type: string }
+        nome_condutor: { type: string }
+        numero_formulario_renach: { type: string }
+        codigo_etapa: { type: integer }
+        descricao_etapa: { type: string }
+        prazo: { type: number }
+        titulo_entrega: { type: string }
+        data_entrega_lote: { type: string, format: date, nullable: true }
+        titulo_hora_entrega: { type: string }
+        hora_entrega_lote: { type: string, nullable: true }
+        data_hora_status: { type: string, format: date-time }
+        texto_ar_correio: { type: string }
+        numero_ar_correio: { type: string, nullable: true }
+        data_ar_correio: { type: string, format: date, nullable: true }
+        situacao_cnh: { type: string }
+        descricao_situacao_entrega: { type: string }
+        codigo_retorno_binco: { type: integer, nullable: true }
+        descricao_retorno_binco: { type: string, nullable: true }
+        data_retorno_binco: { type: string, format: date, nullable: true }
+        descricao_situacao_cnh: { type: string }
+        texto_livre_rejeicao: { type: string }
+        titulo_motivo_devolucao: { type: string }
+        titulo_motivo_baixa: { type: string }
+        titulo_motivo_rejeicao: { type: string }
+        quantidade_motivo_rejeicao: { type: integer }
+        codigo_rejeicao:
+          type: array
+          items:
+            type: object
+            properties:
+              codigo_rejeicao: { type: integer }
+        motivo_rejeicao:
+          type: array
+          items:
+            type: object
+            properties:
+              motivo_rejeicao: { type: string }
+        descricao_acao: { type: string }
+
+    ErroValidacao:
+      type: object
+      properties:
+        message: { type: string, example: "Ocorreu um erro na validação dos dados" }
+        code: { type: integer, example: 422 }
+        errors:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              _required: { type: string, example: "O campo \"CPF\" é de preenchimento obrigatório" }
+              _invalid: { type: string }
+              _format: { type: string }
+      required: [message, code, errors]
