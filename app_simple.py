@@ -11,6 +11,7 @@ st.set_page_config(page_title="Chat – Bedrock Agent", page_icon="💬", layout
 # Lê configurações de ambiente/Secrets (recomendado no Streamlit Cloud)
 AWS_REGION = st.secrets.get("AWS_REGION") or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 AGENT_ID = st.secrets.get("BEDROCK_AGENT_ID") or os.getenv("BEDROCK_AGENT_ID", "")
+AGENT_ALIAS_ID = st.secrets.get("BEDROCK_AGENT_ALIAS_ID") or os.getenv("BEDROCK_AGENT_ALIAS_ID", "")
 
 # =========================
 # Cliente Bedrock Agent Runtime
@@ -42,13 +43,14 @@ def stream_agent_response(user_text: str):
     """Invoca o Agent e faz streaming do texto de resposta.
     A interface APENAS conversa com o Agent (sem chamar outras APIs diretamente).
     """
-    if not AGENT_ID:
-        st.error("Defina BEDROCK_AGENT_ID em st.secrets ou variáveis de ambiente.")
+    if not AGENT_ID or not AGENT_ALIAS_ID:
+        st.error("Defina BEDROCK_AGENT_ID e BEDROCK_AGENT_ALIAS_ID em st.secrets ou variáveis de ambiente.")
         return ""
 
     try:
         response = client.invoke_agent(
             agentId=AGENT_ID,
+            agentAliasId=AGENT_ALIAS_ID,
             sessionId=st.session_state.session_id,
             inputText=user_text,
         )
