@@ -15,6 +15,7 @@ load_dotenv()
 
 # Configuração do Bedrock
 BEDROCK_AGENT_ID = os.getenv('BEDROCK_AGENT_ID')
+BEDROCK_AGENT_ALIAS_ID = os.getenv('BEDROCK_AGENT_ALIAS_ID', 'TSTALIASID')
 AWS_REGION = os.getenv('AWS_REGION', 'sa-east-1')
 
 # Configuração da página
@@ -203,6 +204,7 @@ class BedrockAgent:
             # Chamada real para o Bedrock Agent
             response = self.bedrock_client.invoke_agent(
                 agentId=BEDROCK_AGENT_ID,
+                agentAliasId=BEDROCK_AGENT_ALIAS_ID,
                 sessionId=st.session_state.get('session_id', 'default-session'),
                 inputText=user_message
             )
