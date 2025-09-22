@@ -3,14 +3,24 @@ import json
 import re
 import base64
 import io
+import os
 from datetime import datetime
 import boto3
 from typing import Dict, Any, Optional
 import logging
+from dotenv import load_dotenv
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Carregar variáveis de ambiente
+load_dotenv()
+
+# Configuração do Bedrock
+BEDROCK_AGENT_ID = os.getenv('BEDROCK_AGENT_ID')
+BEDROCK_AGENT_ALIAS_ID = os.getenv('BEDROCK_AGENT_ALIAS_ID')
+AWS_REGION = os.getenv('AWS_REGION', 'sa-east-1')
 
 # Configuração da página
 st.set_page_config(
@@ -411,11 +421,23 @@ class CETBackend:
             }
         }
 
-# Classe para simular o Bedrock Agent
+# Classe para chamadas reais do Bedrock Agent
 class BedrockAgent:
     def __init__(self):
         self.backend = CETBackend()
         self.system_prompt = self._load_system_prompt()
+        self.bedrock_client = self._init_bedrock_client()
+    
+    def _init_bedrock_client(self):
+        """Inicializa o cliente Bedrock"""
+        try:
+            return boto3.client(
+                'bedrock-agent-runtime',
+                region_name=AWS_REGION
+            )
+        except Exception as e:
+            logger.error(f"Erro ao inicializar cliente Bedrock: {e}")
+            return None
     
     def _load_system_prompt(self):
         try:
@@ -428,9 +450,52 @@ class BedrockAgent:
             """
     
     def process_message(self, user_message: str) -> str:
-        """Processa a mensagem do usuário - o agente já sabe o que fazer"""
-        # O agente já sabe tudo pelo system prompt - apenas mostrar resposta
-        return self._handle_general_request(user_message)
+        """Processa a mensagem do usuário usando Bedrock Agent real"""
+        if not self.bedrock_client:
+            return "❌ Erro: Cliente Bedrock não inicializado. Verifique as configurações."
+        
+        if not BEDROCK_AGENT_ID or not BEDROCK_AGENT_ALIAS_ID:
+            return "❌ Erro: IDs do Bedrock Agent não configurados. Verifique o arquivo .env."
+        
+        try:
+            # Chamada real para o Bedrock Agent
+            response = self.bedrock_client.invoke_agent(
+                agentId=BEDROCK_AGENT_ID,
+                agentAliasId=BEDROCK_AGENT_ALIAS_ID,
+                sessionId=st.session_state.get('session_id', 'default-session'),
+                inputText=user_message
+            )
+            
+            # Processar resposta do Bedrock
+            return self._process_bedrock_response(response)
+            
+        except Exception as e:
+            logger.error(f"Erro ao chamar Bedrock Agent: {e}")
+            return f"❌ Erro ao processar mensagem: {str(e)}"
+    
+    def _process_bedrock_response(self, response) -> str:
+        """Processa a resposta do Bedrock Agent"""
+        try:
+            # Ler a resposta do Bedrock
+            for event in response['completion']:
+                if 'chunk' in event:
+                    chunk = event['chunk']
+                    if 'bytes' in chunk:
+                        # Decodificar bytes para texto
+                        text = chunk['bytes'].decode('utf-8')
+                        return text
+                elif 'trace' in event:
+                    # Processar traces se necessário
+                    trace = event['trace']
+                    if 'trace' in trace and 'trace' in trace['trace']:
+                        # Processar trace específico
+                        pass
+            
+            return "❌ Não foi possível processar a resposta do Bedrock Agent."
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar resposta do Bedrock: {e}")
+            return f"❌ Erro ao processar resposta: {str(e)}"
     
     
     
@@ -539,6 +604,10 @@ def main():
     # Inicializar o agente
     if 'agent' not in st.session_state:
         st.session_state.agent = BedrockAgent()
+    
+    # Inicializar session_id se não existir
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     # Adicionar mensagem de boas-vindas se não houver mensagens
     if not st.session_state.messages:
