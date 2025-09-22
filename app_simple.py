@@ -110,12 +110,16 @@ with st.sidebar:
 ensure_session()
 st.title("💬 Chat com Bedrock Agent")
 
-# Renderiza histórico
-for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"]) 
+# Controles rápidos (fixo no topo)
+if st.button("🧹 Resetar sessão", help="Apaga o histórico e cria uma nova sessão de chat"):
+    reset_session()
+    st.toast("Sessão reiniciada.")
+    try:
+        st.rerun()
+    except Exception:
+        st.experimental_rerun()
 
-# Controles rápidos (fica acima do chat)
+# Renderiza histórico
 with st.container():
     if st.button("🧹 Resetar sessão", help="Apaga o histórico e cria uma nova sessão de chat"):
         reset_session()
