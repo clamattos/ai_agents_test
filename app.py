@@ -20,45 +20,204 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS personalizado
+# CSS personalizado estilo ChatGPT
 st.markdown("""
 <style>
+    /* Reset e configurações gerais */
+    .stApp {
+        background-color: #f7f7f8;
+    }
+    
+    /* Header principal */
     .main-header {
-        background: linear-gradient(90deg, #1f4e79, #2d5a87);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 1rem;
-        border-radius: 10px;
+        padding: 1.5rem;
+        border-radius: 15px;
         margin-bottom: 2rem;
         text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
-    .chat-message {
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 0.5rem 0;
-        border-left: 4px solid #1f4e79;
+    
+    /* Container do chat */
+    .chat-container {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+        min-height: 500px;
+        max-height: 70vh;
+        overflow-y: auto;
     }
+    
+    /* Mensagens do usuário */
     .user-message {
-        background-color: #e3f2fd;
-        margin-left: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 18px 18px 4px 18px;
+        margin: 1rem 0 1rem 3rem;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        position: relative;
     }
+    
+    .user-message::before {
+        content: "👤";
+        position: absolute;
+        left: -2.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: #667eea;
+        border-radius: 50%;
+        width: 2rem;
+        height: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+    }
+    
+    /* Mensagens do assistente */
     .assistant-message {
-        background-color: #f5f5f5;
-        margin-right: 2rem;
+        background: #f1f3f4;
+        color: #333;
+        padding: 1rem 1.5rem;
+        border-radius: 18px 18px 18px 4px;
+        margin: 1rem 3rem 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        position: relative;
+        border: 1px solid #e0e0e0;
     }
+    
+    .assistant-message::before {
+        content: "🤖";
+        position: absolute;
+        right: -2.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        background: #f1f3f4;
+        border-radius: 50%;
+        width: 2rem;
+        height: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        border: 1px solid #e0e0e0;
+    }
+    
+    /* Mensagens de sucesso */
     .success-message {
-        background-color: #e8f5e8;
-        border-left-color: #4caf50;
+        background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+        color: white;
+        border-radius: 18px 18px 18px 4px;
+        margin: 1rem 3rem 1rem 0;
     }
+    
+    /* Mensagens de erro */
     .error-message {
-        background-color: #ffebee;
-        border-left-color: #f44336;
+        background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+        color: white;
+        border-radius: 18px 18px 18px 4px;
+        margin: 1rem 3rem 1rem 0;
     }
-    .info-box {
-        background-color: #f0f8ff;
-        border: 1px solid #1f4e79;
-        border-radius: 5px;
+    
+    /* Input area */
+    .chat-input {
+        background: white;
+        border-radius: 15px;
         padding: 1rem;
-        margin: 1rem 0;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+    }
+    
+    /* Botões */
+    .chat-button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+    
+    .chat-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Sidebar */
+    .sidebar-info {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border: 1px solid #e0e0e0;
+    }
+    
+    /* Scrollbar personalizada */
+    .chat-container::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .chat-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+    
+    .chat-container::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 3px;
+    }
+    
+    .chat-container::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+    
+    /* Animações */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .chat-message {
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    /* Typing indicator */
+    .typing-indicator {
+        display: flex;
+        align-items: center;
+        padding: 1rem 1.5rem;
+        background: #f1f3f4;
+        border-radius: 18px 18px 18px 4px;
+        margin: 1rem 3rem 1rem 0;
+        border: 1px solid #e0e0e0;
+    }
+    
+    .typing-dots {
+        display: flex;
+        gap: 4px;
+    }
+    
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        background: #999;
+        border-radius: 50%;
+        animation: typing 1.4s infinite ease-in-out;
+    }
+    
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes typing {
+        0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+        40% { transform: scale(1); opacity: 1; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -70,6 +229,15 @@ if 'user_data' not in st.session_state:
     st.session_state.user_data = {}
 if 'current_step' not in st.session_state:
     st.session_state.current_step = 'welcome'
+if 'conversation_history' not in st.session_state:
+    st.session_state.conversation_history = []
+if 'quick_actions' not in st.session_state:
+    st.session_state.quick_actions = [
+        "Quero emitir a segunda via da minha CNH",
+        "Qual o status da minha solicitação?",
+        "Preciso de ajuda com PPD",
+        "Como consultar minha CNH?"
+    ]
 
 # Classe para gerenciar o backend (adaptada do lambda)
 class CETBackend:
@@ -572,147 +740,140 @@ def main():
         })
     
     # Layout principal
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.subheader("💬 Chat com o Assistente")
+        # Container do chat
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
         
         # Exibir histórico de mensagens
         for message in st.session_state.messages:
-            with st.container():
-                if message["role"] == "user":
-                    st.markdown(f"""
-                    <div class="chat-message user-message">
-                        <strong>Você:</strong> {message["content"]}
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div class="chat-message assistant-message">
-                        <strong>Assistente:</strong> {message["content"]}
-                    </div>
-                    """, unsafe_allow_html=True)
+            if message["role"] == "user":
+                st.markdown(f"""
+                <div class="user-message">
+                    {message["content"]}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Detectar tipo de mensagem para aplicar estilo
+                message_class = "assistant-message"
+                if "✅" in message["content"]:
+                    message_class = "success-message"
+                elif "❌" in message["content"]:
+                    message_class = "error-message"
+                
+                st.markdown(f"""
+                <div class="{message_class}">
+                    {message["content"]}
+                </div>
+                """, unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Input area
+        st.markdown('<div class="chat-input">', unsafe_allow_html=True)
         
         # Input para nova mensagem
-        col_input, col_clear = st.columns([3, 1])
+        col_input, col_send, col_clear = st.columns([4, 1, 1])
         
         with col_input:
-            user_input = st.text_input("Digite sua mensagem:", key="user_input", placeholder="Ex: Preciso emitir a segunda via da minha CNH")
+            user_input = st.text_input(
+                "Digite sua mensagem:", 
+                key="user_input", 
+                placeholder="Ex: Preciso emitir a segunda via da minha CNH",
+                label_visibility="collapsed"
+            )
+        
+        with col_send:
+            send_clicked = st.button("📤", help="Enviar mensagem", key="send_btn")
         
         with col_clear:
-            if st.button("🗑️ Limpar Chat"):
-                st.session_state.messages = []
-                st.session_state.user_data = {}
-                st.session_state.current_step = 'welcome'
-                st.rerun()
+            clear_clicked = st.button("🗑️", help="Limpar chat", key="clear_btn")
         
-        if st.button("Enviar") and user_input:
+        if clear_clicked:
+            st.session_state.messages = []
+            st.session_state.user_data = {}
+            st.session_state.current_step = 'welcome'
+            st.rerun()
+        
+        if (send_clicked or st.session_state.get('auto_send', False)) and user_input:
             # Adicionar mensagem do usuário
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Processar com o agente imediatamente
-            response = st.session_state.agent.process_message(user_input)
+            # Mostrar indicador de digitação
+            with st.spinner("Assistente está digitando..."):
+                # Processar com o agente
+                response = st.session_state.agent.process_message(user_input)
             
             # Adicionar resposta do assistente
             st.session_state.messages.append({"role": "assistant", "content": response})
             
             # Limpar input e recarregar
+            st.session_state.auto_send = False
             st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        st.subheader("📋 Formulários")
+        # Status da sessão
+        if st.session_state.get('user_data'):
+            st.markdown("""
+            <div class="sidebar-info">
+                <h4>✅ Dados Confirmados</h4>
+                <p>Seus dados foram validados e estão prontos para emissão da guia DAE.</p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        # Formulário para segunda via
-        with st.expander("🚗 Solicitar Segunda Via", expanded=True):
-            with st.form("segunda_via_form"):
-                nome = st.text_input("Nome completo")
-                cpf = st.text_input("CPF (11 dígitos)", max_chars=11)
-                data_nascimento = st.text_input("Data de nascimento (DD/MM/AAAA)")
-                nome_mae = st.text_input("Nome da mãe")
-                
-                if st.form_submit_button("Confirmar Dados"):
-                    if nome and cpf and data_nascimento and nome_mae:
-                        payload = {
-                            "cpf": cpf,
-                            "nome_condutor": nome,
-                            "data_nascimento": data_nascimento,
-                            "nome_mae": nome_mae
-                        }
-                        
-                        result = st.session_state.agent.backend.confirmar_dados(payload)
-                        
-                        if result.get("status") == 200:
-                            st.session_state.user_data = result["data"]
-                            st.success("✅ Dados confirmados com sucesso!")
-                            
-                            # Exibir dados retornados
-                            st.json(result["data"])
-                            
-                            # Botão para gerar guia
-                            if st.button("Gerar Guia DAE"):
-                                guia_payload = {
-                                    **payload,
-                                    "flow_id": result["data"]["flow_id"],
-                                    "codigo_municipio_condutor": result["data"]["retornoNSDGXS02"]["codigo_municipio_condutor"],
-                                    "ddd_celular": result["data"]["retornoNSDGXS02"]["ddd_celular"],
-                                    "numero_celular": result["data"]["retornoNSDGXS02"]["numero_celular"],
-                                    "email": result["data"]["retornoNSDGXS02"]["email"],
-                                    "codigo_taxa": result["data"]["retornoNSDGXS02"]["codigo_taxa"],
-                                    "codigo_servico": result["data"]["retornoNSDGXS02"]["codigo_servico"],
-                                    "numero_cnh": result["data"]["retornoNSDGXS02"]["numero_cnh"],
-                                    "numero_ip_micro": "192.168.1.1"
-                                }
-                                
-                                guia_result = st.session_state.agent.backend.exibir_opcoes_pagamento(guia_payload)
-                                
-                                if guia_result.get("status") == 200:
-                                    st.success("✅ Guia DAE gerada com sucesso!")
-                                    st.json(guia_result["data"])
-                                    
-                                    # Exibir código de barras se disponível
-                                    if guia_result["data"].get("codigoBarras"):
-                                        try:
-                                            # Decodificar base64 e exibir como imagem
-                                            barcode_data = base64.b64decode(guia_result["data"]["codigoBarras"])
-                                            st.image(barcode_data, caption="Código de Barras DAE")
-                                        except:
-                                            st.info("Código de barras disponível (formato base64)")
-                        else:
-                            st.error(f"❌ Erro: {result.get('error', 'Erro desconhecido')}")
-                    else:
-                        st.warning("⚠️ Preencha todos os campos obrigatórios")
-        
-        # Formulário para consulta de status
-        with st.expander("📊 Consultar Status"):
-            with st.form("status_form"):
-                cpf_status = st.text_input("CPF (11 dígitos)", key="cpf_status", max_chars=11)
-                data_nascimento_status = st.text_input("Data de nascimento (DD/MM/AAAA)", key="data_nascimento_status")
-                
-                if st.form_submit_button("Consultar Status"):
-                    if cpf_status and data_nascimento_status:
-                        payload = {
-                            "cpf": cpf_status,
-                            "data_nascimento": data_nascimento_status
-                        }
-                        
-                        result = st.session_state.agent.backend.exibir_dados(payload)
-                        
-                        if result.get("status") == 200:
-                            st.success("✅ Status consultado com sucesso!")
-                            st.json(result["data"])
-                        else:
-                            st.error(f"❌ Erro: {result.get('error', 'Erro desconhecido')}")
-                    else:
-                        st.warning("⚠️ Preencha todos os campos obrigatórios")
-        
-        # Informações adicionais
+        # Informações sobre o sistema
         st.markdown("""
-        <div class="info-box">
-            <h4>ℹ️ Informações Importantes</h4>
+        <div class="sidebar-info">
+            <h4>🚗 Sobre o Sistema</h4>
+            <p>Assistente virtual para emissão e consulta de segunda via de CNH, PPD e ACC do CET-MG.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Instruções de uso
+        st.markdown("""
+        <div class="sidebar-info">
+            <h4>📋 Como Usar</h4>
             <ul>
-                <li>Este é um sistema de demonstração</li>
-                <li>Os dados são fictícios para fins de teste</li>
+                <li><strong>Solicitar 2ª via:</strong> Digite "quero emitir a segunda via da minha CNH"</li>
+                <li><strong>Consultar status:</strong> Digite "qual o status da minha solicitação"</li>
+                <li><strong>Fornecer dados:</strong> Informe nome, CPF, data de nascimento e nome da mãe</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Atalhos rápidos
+        st.markdown("""
+        <div class="sidebar-info">
+            <h4>⚡ Atalhos Rápidos</h4>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        for i, action in enumerate(st.session_state.quick_actions):
+            if st.button(f"💬 {action}", key=f"quick_{i}", help="Clique para enviar esta mensagem"):
+                st.session_state.auto_send = True
+                st.session_state.user_input = action
+                st.rerun()
+        
+        # Histórico de conversas
+        if len(st.session_state.messages) > 1:
+            st.markdown("""
+            <div class="sidebar-info">
+                <h4>💬 Histórico</h4>
+                <p>Conversa ativa com {} mensagens</p>
+            </div>
+            """.format(len(st.session_state.messages)), unsafe_allow_html=True)
+        
+        # Informações técnicas
+        st.markdown("""
+        <div class="sidebar-info">
+            <h4>🔧 Sistema de Demonstração</h4>
+            <ul>
+                <li>Dados são fictícios para fins de teste</li>
                 <li>Em produção, conectaria com APIs reais do CET-MG</li>
+                <li>Desenvolvido com Streamlit e AWS Bedrock</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
