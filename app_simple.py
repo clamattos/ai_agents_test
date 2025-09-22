@@ -111,7 +111,7 @@ ensure_session()
 st.title("💬 Chat com Bedrock Agent")
 
 # Controles rápidos (fixo no topo)
-if st.button("🧹 Resetar sessão", key="reset_session_btn_top", help="Apaga o histórico e cria uma nova sessão de chat"):
+if st.button("🧹 Resetar sessão", key=f"reset_session_btn_{st.session_state.get('session_id','')}", help="Apaga o histórico e cria uma nova sessão de chat"):
     reset_session()
     st.toast("Sessão reiniciada.")
     try:
