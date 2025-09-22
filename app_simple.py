@@ -1,22 +1,16 @@
 import streamlit as st
 import os
-from datetime import datetime
 import boto3
-from typing import Dict, Any, Optional
-import logging
+import uuid
+from datetime import datetime
 from dotenv import load_dotenv
-
-# Configuração de logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Carregar variáveis de ambiente
 load_dotenv()
 
 # Configuração do Bedrock
 BEDROCK_AGENT_ID = os.getenv('BEDROCK_AGENT_ID')
-BEDROCK_AGENT_ALIAS_ID = os.getenv('BEDROCK_AGENT_ALIAS_ID', 'TSTALIASID')
-AWS_REGION = os.getenv('AWS_REGION', 'sa-east-1')
+AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
 
 # Configuração da página
 st.set_page_config(
@@ -168,6 +162,9 @@ st.markdown("""
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 
+if 'session_id' not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+
 if 'quick_actions' not in st.session_state:
     st.session_state.quick_actions = [
         "Quero emitir a segunda via da minha CNH",
@@ -176,144 +173,28 @@ if 'quick_actions' not in st.session_state:
         "Como consultar minha CNH?"
     ]
 
-# Classe para chamadas reais do Bedrock Agent
-class BedrockAgent:
-    def __init__(self):
-        self.bedrock_client = self._init_bedrock_client()
-    
-    def _init_bedrock_client(self):
-        """Inicializa o cliente Bedrock"""
-        try:
-            return boto3.client(
-                'bedrock-agent-runtime',
-                region_name=AWS_REGION
-            )
-        except Exception as e:
-            logger.error(f"Erro ao inicializar cliente Bedrock: {e}")
-            return None
-    
-    def _check_agent_exists(self):
-        """Verifica se o Agent existe"""
-        try:
-            if not self.bedrock_client or not BEDROCK_AGENT_ID:
-                return False
-            
-            # Tentar obter informações do agent
-            bedrock_agent_client = boto3.client('bedrock-agent', region_name=AWS_REGION)
-            response = bedrock_agent_client.get_agent(agentId=BEDROCK_AGENT_ID)
-            return response.get('agent', {}).get('agentStatus') == 'PREPARED'
-        except Exception as e:
-            logger.error(f"Erro ao verificar agent: {e}")
-            return False
-    
-    def process_message(self, user_message: str) -> str:
-        """Processa a mensagem do usuário usando Bedrock Agent real"""
-        if not self.bedrock_client:
-            return "❌ Erro: Cliente Bedrock não inicializado. Verifique as configurações."
+# Função para chamar o Bedrock Agent
+def call_bedrock_agent(user_text, session_id):
+    """Chama o Bedrock Agent e retorna a resposta"""
+    try:
+        runtime = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
         
-        if not BEDROCK_AGENT_ID:
-            return "❌ Erro: ID do Bedrock Agent não configurado. Verifique o arquivo .env."
+        response = runtime.invoke_agent(
+            agentId=BEDROCK_AGENT_ID,
+            sessionId=session_id,
+            inputText=user_text,
+        )
         
-        # Verificar se o agent existe (comentado para teste)
-        # if not self._check_agent_exists():
-        #     return f"""❌ **Erro de Configuração do Bedrock Agent**
-        # 
-        # O Bedrock Agent não foi encontrado ou não está ativo. Verifique:
-        # 
-        # 1. **BEDROCK_AGENT_ID** está correto no arquivo .env
-        # 2. O Agent existe na região {AWS_REGION}
-        # 3. O Agent está ativo e configurado
-        # 4. Suas credenciais AWS têm permissão para acessar o Bedrock
-        # 
-        # **ID atual:** {BEDROCK_AGENT_ID}
-        # **Região:** {AWS_REGION}
-        # 
-        # Consulte a documentação do AWS Bedrock para configurar corretamente."""
+        # Coletar chunks de texto
+        output = []
+        for chunk in response.get("completion", []):
+            if "chunk" in chunk and "bytes" in chunk["chunk"]:
+                output.append(chunk["chunk"]["bytes"].decode("utf-8"))
         
-        try:
-            # Chamada real para o Bedrock Agent
-            response = self.bedrock_client.invoke_agent(
-                agentId=BEDROCK_AGENT_ID,
-                agentAliasId=BEDROCK_AGENT_ALIAS_ID,
-                sessionId=st.session_state.get('session_id', 'default-session'),
-                inputText=user_message
-            )
-            
-            # Processar resposta do Bedrock
-            return self._process_bedrock_response(response)
-            
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Erro ao chamar Bedrock Agent: {e}")
-            
-            # Fallback simples para teste
-            return self._fallback_response(user_message)
-    
-    def _process_bedrock_response(self, response) -> str:
-        """Processa a resposta do Bedrock Agent"""
-        try:
-            # Ler a resposta do Bedrock
-            full_response = ""
-            for event in response['completion']:
-                if 'chunk' in event:
-                    chunk = event['chunk']
-                    if 'bytes' in chunk:
-                        # Decodificar bytes para texto
-                        text = chunk['bytes'].decode('utf-8')
-                        full_response += text
-                elif 'trace' in event:
-                    # Processar traces se necessário
-                    trace = event['trace']
-                    if 'trace' in trace and 'trace' in trace['trace']:
-                        # Processar trace específico
-                        pass
-            
-            if full_response:
-                return full_response
-            else:
-                return "❌ Não foi possível processar a resposta do Bedrock Agent."
-            
-        except Exception as e:
-            logger.error(f"Erro ao processar resposta do Bedrock: {e}")
-            return f"❌ Erro ao processar resposta: {str(e)}"
-    
-    def _fallback_response(self, user_message: str) -> str:
-        """Resposta de fallback quando o Bedrock não funciona"""
-        user_message_lower = user_message.lower()
+        return "".join(output)
         
-        if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
-            return """Claro! Para emissão do documento, preciso de algumas informações:
-
-**Por favor, me informe:**
-- Nome completo
-- CPF (11 dígitos, apenas números)
-- Data de nascimento (formato DD/MM/AAAA)
-- Nome da mãe
-
-Pode me informar esses dados?"""
-        elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
-            return """Para consultar o status da sua solicitação, preciso de:
-        
-- CPF (11 dígitos)
-- Data de nascimento (formato DD/MM/AAAA)
-
-Pode me informar esses dados?"""
-        else:
-            return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
-
-🚗 **Solicitar segunda via** de CNH, PPD ou ACC
-📋 **Consultar status** da sua solicitação em andamento
-
-Como posso ajudá-lo hoje?"""
-    
-    def get_welcome_message(self) -> str:
-        """Retorna a mensagem de boas-vindas inicial"""
-        return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
-
-🚗 **Solicitar segunda via** de CNH, PPD ou ACC
-📋 **Consultar status** da sua solicitação em andamento
-
-Como posso ajudá-lo hoje?"""
+    except Exception as e:
+        return f"❌ Erro ao processar mensagem: {str(e)}"
 
 # Interface principal
 def main():
@@ -321,19 +202,16 @@ def main():
     st.title("🚗 CET-MG - Assistente Virtual")
     st.markdown("---")
     
-    # Inicializar o agente
-    if 'agent' not in st.session_state:
-        st.session_state.agent = BedrockAgent()
-    
-    # Inicializar session_id se não existir
-    if 'session_id' not in st.session_state:
-        st.session_state.session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
     # Adicionar mensagem de boas-vindas se não houver mensagens
     if not st.session_state.messages:
         st.session_state.messages.append({
             "role": "assistant", 
-            "content": st.session_state.agent.get_welcome_message()
+            "content": """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
+
+🚗 **Solicitar segunda via** de CNH, PPD ou ACC
+📋 **Consultar status** da sua solicitação em andamento
+
+Como posso ajudá-lo hoje?"""
         })
     
     # Layout principal
@@ -378,6 +256,7 @@ def main():
         
         if clear_clicked:
             st.session_state.messages = []
+            st.session_state.session_id = str(uuid.uuid4())
             st.rerun()
         
         # Processar mensagem quando usuário digita e pressiona Enter
@@ -387,8 +266,8 @@ def main():
             
             # Mostrar indicador de digitação
             with st.spinner("Assistente está digitando..."):
-                # Processar com o agente
-                response = st.session_state.agent.process_message(user_input)
+                # Chamar Bedrock Agent
+                response = call_bedrock_agent(user_input, st.session_state.session_id)
             
             # Adicionar resposta do assistente
             st.session_state.messages.append({"role": "assistant", "content": response})
@@ -427,8 +306,8 @@ def main():
                 # Adicionar mensagem do usuário
                 st.session_state.messages.append({"role": "user", "content": action})
                 
-                # Processar com o agente
-                response = st.session_state.agent.process_message(action)
+                # Chamar Bedrock Agent
+                response = call_bedrock_agent(action, st.session_state.session_id)
                 
                 # Adicionar resposta do assistente
                 st.session_state.messages.append({"role": "assistant", "content": response})
