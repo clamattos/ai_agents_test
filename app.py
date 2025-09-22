@@ -227,10 +227,6 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'user_data' not in st.session_state:
     st.session_state.user_data = {}
-if 'current_step' not in st.session_state:
-    st.session_state.current_step = 'welcome'
-if 'conversation_history' not in st.session_state:
-    st.session_state.conversation_history = []
 if 'quick_actions' not in st.session_state:
     st.session_state.quick_actions = [
         "Quero emitir a segunda via da minha CNH",
@@ -432,225 +428,16 @@ class BedrockAgent:
             """
     
     def process_message(self, user_message: str) -> str:
-        """Processa a mensagem do usuário seguindo o system prompt"""
-        user_message_lower = user_message.lower()
-        
-        # Seguir o fluxo do system prompt
-        if st.session_state.get('current_step') == 'collecting_data':
-            return self._handle_data_collection(user_message)
-        elif st.session_state.get('current_step') == 'confirming_data':
-            return self._handle_data_confirmation(user_message)
-        elif st.session_state.get('current_step') == 'generating_dae':
-            return self._handle_dae_generation(user_message)
-        else:
-            return self._handle_initial_request(user_message)
+        """Processa a mensagem do usuário - o agente já sabe o que fazer"""
+        # O agente já sabe tudo pelo system prompt - apenas mostrar resposta
+        return self._handle_general_request(user_message)
     
-    def _handle_initial_request(self, message: str) -> str:
-        """Handle initial user request following system prompt"""
-        user_message_lower = message.lower()
-        
-        # Detectar intenção conforme system prompt
-        if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
-            st.session_state.current_step = 'collecting_data'
-            return """Claro! Para emissão do documento, preciso de algumas informações:
-
-**Por favor, me informe:**
-- Nome completo
-- CPF (11 dígitos, apenas números)
-- Data de nascimento (formato DD/MM/AAAA)
-- Nome da mãe
-
-Pode me informar esses dados?"""
-        elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
-            return """Para consultar o status da sua solicitação, preciso de:
-            
-- CPF (11 dígitos)
-- Data de nascimento (formato DD/MM/AAAA)
-
-Use o formulário de consulta ao lado para verificar o status."""
-        else:
-            return self._handle_general_request(message)
     
-    def _handle_data_collection(self, message: str) -> str:
-        """Handle data collection phase following system prompt"""
-        # Verificar se a mensagem contém dados do usuário
-        if self._extract_user_data(message):
-            # Extrair dados conforme system prompt
-            user_data = self._extract_user_data_from_message(message)
-            if user_data:
-                # Confirmar dados conforme system prompt
-                st.session_state.current_step = 'confirming_data'
-                st.session_state.temp_user_data = user_data
-                return f"""Vou seguir com a solicitação de 2ª via para: 
-CPF {user_data['cpf']}, Nome {user_data['nome_condutor']}, Nascimento {user_data['data_nascimento']}, Mãe {user_data['nome_mae']}. 
-
-Confirmar?"""
-            else:
-                return "❌ Não consegui identificar todos os dados necessários. Pode me informar novamente?"
-        else:
-            return "Por favor, me informe os dados necessários: nome completo, CPF (11 dígitos), data de nascimento (DD/MM/AAAA) e nome da mãe."
     
-    def _handle_data_confirmation(self, message: str) -> str:
-        """Handle data confirmation phase following system prompt"""
-        user_message_lower = message.lower()
-        
-        if any(word in user_message_lower for word in ['sim', 'confirmar', 'ok', 'certo']):
-            # Chamar confirmar-dados conforme system prompt
-            user_data = st.session_state.temp_user_data
-            result = self.backend.confirmar_dados(user_data)
-            
-            if result.get("status") == 200:
-                st.session_state.user_data = result["data"]
-                st.session_state.current_step = 'data_confirmed'
-                
-                # Apresentar todos os dados conforme system prompt
-                data = result["data"]["retornoNSDGXS02"]
-                return f"""✅ Dados confirmados com sucesso!
-
-**Seus dados cadastrados:**
-- CPF: {data['cpf']}
-- Nome: {data.get('nome_condutor', 'N/A')}
-- CNH: {data['numero_cnh']}
-- Endereço: {data['endereco_condutor']}, {data['numero_endereco_condutor']}
-- Município: {data['nome_municipio_condutor']}/{data['sigla_uf_municipio_condutor']}
-- Telefone: ({data['ddd_celular']}) {data['numero_celular']}
-- Email: {data['email']}
-
-Deseja alterar algum dado? Se sim: "Vou te repassar para nosso agente de alteração de dados." Se não: "Vou gerar a guia (DAE) para pagamento." """
-            else:
-                return f"❌ Erro na validação: {result.get('error', 'Erro desconhecido')}"
-        else:
-            return "Dados não confirmados. Deseja alterar algum dado ou confirmar novamente?"
-    
-    def _handle_dae_generation(self, message: str) -> str:
-        """Handle DAE generation phase following system prompt"""
-        user_message_lower = message.lower()
-        
-        if any(word in user_message_lower for word in ['sim', 'gerar', 'dae', 'guia', 'pagamento']):
-            # Chamar exibir-opcoes-pagamento conforme system prompt
-            return self._generate_dae_guide()
-        else:
-            return "Deseja gerar a guia DAE para pagamento?"
-    
-    def _extract_user_data(self, message: str) -> bool:
-        """Verifica se a mensagem contém dados do usuário"""
-        # Procurar por padrões que indicam dados do usuário
-        import re
-        
-        # Verificar se tem CPF (11 dígitos)
-        cpf_pattern = r'\b\d{11}\b'
-        if re.search(cpf_pattern, message):
-            return True
-        
-        # Verificar se tem data (DD/MM/AAAA)
-        date_pattern = r'\b\d{2}/\d{2}/\d{4}\b'
-        if re.search(date_pattern, message):
-            return True
-            
-        return False
-    
-    def _extract_user_data_from_message(self, message: str) -> dict:
-        """Extrai dados do usuário da mensagem"""
-        import re
-        
-        # Extrair dados da mensagem
-        cpf_match = re.search(r'\b(\d{11})\b', message)
-        date_match = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', message)
-        
-        if cpf_match and date_match:
-            cpf = cpf_match.group(1)
-            data_nascimento = date_match.group(1)
-            
-            # Tentar extrair nome e nome da mãe
-            words = message.split()
-            # Remover CPF e data da lista de palavras
-            words = [w for w in words if not re.match(r'\d{11}', w) and not re.match(r'\d{2}/\d{2}/\d{4}', w)]
-            
-            if len(words) >= 2:
-                nome = words[0]
-                nome_mae = words[-1]
-                
-                return {
-                    "cpf": cpf,
-                    "nome_condutor": nome,
-                    "data_nascimento": data_nascimento,
-                    "nome_mae": nome_mae
-                }
-        
-        return None
-    
-    def _process_user_data(self, message: str) -> str:
-        """Processa os dados fornecidos pelo usuário"""
-        import re
-        
-        # Extrair dados da mensagem
-        cpf_match = re.search(r'\b(\d{11})\b', message)
-        date_match = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', message)
-        
-        if cpf_match and date_match:
-            cpf = cpf_match.group(1)
-            data_nascimento = date_match.group(1)
-            
-            # Tentar extrair nome e nome da mãe (assumindo que são as primeiras e últimas palavras)
-            words = message.split()
-            # Remover CPF e data da lista de palavras
-            words = [w for w in words if not re.match(r'\d{11}', w) and not re.match(r'\d{2}/\d{2}/\d{4}', w)]
-            
-            if len(words) >= 2:
-                nome = words[0]
-                nome_mae = words[-1]
-                
-                # Processar com o backend
-                payload = {
-                    "cpf": cpf,
-                    "nome_condutor": nome,
-                    "data_nascimento": data_nascimento,
-                    "nome_mae": nome_mae
-                }
-                
-                result = self.backend.confirmar_dados(payload)
-                
-                if result.get("status") == 200:
-                    st.session_state.user_data = result["data"]
-                    st.session_state.current_step = 'data_confirmed'
-                    return f"""✅ Dados confirmados com sucesso!
-
-**Seus dados cadastrados:**
-- CPF: {cpf}
-- Nome: {nome}
-- Data de nascimento: {data_nascimento}
-- Nome da mãe: {nome_mae}
-
-**Dados do sistema:**
-- CNH: {result['data']['retornoNSDGXS02']['numero_cnh']}
-- Endereço: {result['data']['retornoNSDGXS02']['endereco_condutor']}, {result['data']['retornoNSDGXS02']['numero_endereco_condutor']}
-- Município: {result['data']['retornoNSDGXS02']['nome_municipio_condutor']}/{result['data']['retornoNSDGXS02']['sigla_uf_municipio_condutor']}
-- Telefone: ({result['data']['retornoNSDGXS02']['ddd_celular']}) {result['data']['retornoNSDGXS02']['numero_celular']}
-- Email: {result['data']['retornoNSDGXS02']['email']}
-
-Deseja alterar algum dado ou posso gerar a guia DAE para pagamento?"""
-                else:
-                    return f"❌ Erro na validação: {result.get('error', 'Erro desconhecido')}"
-            else:
-                return "❌ Não consegui identificar o nome e nome da mãe. Pode me informar novamente?"
-        else:
-            return "❌ Não consegui identificar o CPF e data de nascimento. Pode me informar novamente?"
-    
-    def _handle_status_request(self, message: str) -> str:
-        return """Para consultar o status da sua solicitação, preciso de:
-        
-- CPF (11 dígitos)
-- Data de nascimento (formato DD/MM/AAAA)
-
-Use o formulário de consulta ao lado para verificar o status."""
     
     def _handle_general_request(self, message: str) -> str:
-        return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
-
-🚗 **Solicitar segunda via** de CNH, PPD ou ACC
-📋 **Consultar status** da sua solicitação em andamento
-
-Como posso ajudá-lo hoje?"""
+        # O agente já sabe tudo pelo system prompt - apenas retornar resposta padrão
+        return "Olá! Como posso ajudá-lo hoje?"
     
     def get_welcome_message(self) -> str:
         """Retorna a mensagem de boas-vindas inicial"""
@@ -720,13 +507,7 @@ Obrigado por usar nossos serviços! 🚗"""
 
 # Interface principal
 def main():
-    # Cabeçalho
-    st.markdown("""
-    <div class="main-header">
-        <h1>🚗 CET-MG - Assistente CNH</h1>
-        <p>Assistente virtual para emissão e consulta de segunda via de CNH, PPD e ACC</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # Sem cabeçalho - interface mais limpa
     
     # Inicializar o agente
     if 'agent' not in st.session_state:
@@ -770,11 +551,8 @@ def main():
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Input area
-        st.markdown('<div class="chat-input">', unsafe_allow_html=True)
-        
-        # Input para nova mensagem
-        col_input, col_send, col_clear = st.columns([4, 1, 1])
+        # Input area - sem container branco
+        col_input, col_clear = st.columns([5, 1])
         
         with col_input:
             user_input = st.text_input(
@@ -784,19 +562,16 @@ def main():
                 label_visibility="collapsed"
             )
         
-        with col_send:
-            send_clicked = st.button("📤", help="Enviar mensagem", key="send_btn")
-        
         with col_clear:
             clear_clicked = st.button("🗑️", help="Limpar chat", key="clear_btn")
         
         if clear_clicked:
             st.session_state.messages = []
             st.session_state.user_data = {}
-            st.session_state.current_step = 'welcome'
             st.rerun()
         
-        if send_clicked and user_input:
+        # Processar mensagem quando usuário digita e pressiona Enter
+        if user_input:
             # Adicionar mensagem do usuário
             st.session_state.messages.append({"role": "user", "content": user_input})
             
@@ -810,8 +585,6 @@ def main():
             
             # Limpar input e recarregar
             st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         # Status da sessão
