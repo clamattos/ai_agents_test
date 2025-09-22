@@ -104,6 +104,7 @@ def format_dae_response(text: str) -> str:
     anchor = "Dados da emissão:"
     if anchor in text:
         text = text.split(anchor, 1)[1]
+    # Normaliza: troca quebras por espaço e colapsa espaços múltiplos
     t = " ".join(text.replace("
 ", " ").split())
     pattern = re.compile(r"([A-Za-z_]+):")
