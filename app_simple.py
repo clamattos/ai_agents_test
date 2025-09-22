@@ -108,10 +108,12 @@ with st.sidebar:
 # UI – Área principal (chat estilo ChatGPT)
 # =========================
 ensure_session()
+
 st.title("💬 Chat com Bedrock Agent")
 
-# Controles rápidos (fixo no topo)
-if "reset_rendered" not in st.session_state:
+# Barra superior com botão único de reset (direita)
+col_left, col_right = st.columns([1, 0.2])
+with col_right:
     if st.button("🧹 Resetar sessão", key="reset_session_btn_top", help="Apaga o histórico e cria uma nova sessão de chat"):
         reset_session()
         st.toast("Sessão reiniciada.")
@@ -119,17 +121,11 @@ if "reset_rendered" not in st.session_state:
             st.rerun()
         except Exception:
             st.experimental_rerun()
-    st.session_state.reset_rendered = True
 
 # Renderiza histórico
-with st.container():
-    if st.button("🧹 Resetar sessão", key="reset_session_btn_top", help="Apaga o histórico e cria uma nova sessão de chat"):
-        reset_session()
-        st.toast("Sessão reiniciada.")
-        try:
-            st.rerun()
-        except Exception:
-            st.experimental_rerun()
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"]) 
 
 # Entrada do usuário
 prompt = st.chat_input("Escreva sua mensagem…")
