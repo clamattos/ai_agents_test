@@ -1,319 +1,142 @@
-import streamlit as st
 import os
-import boto3
 import uuid
-from datetime import datetime
-from dotenv import load_dotenv
+import boto3
+import streamlit as st
 
-# Carregar variáveis de ambiente
-load_dotenv()
+# =========================
+# Configuração básica
+# =========================
+st.set_page_config(page_title="Chat – Bedrock Agent", page_icon="💬", layout="wide")
 
-# Configuração do Bedrock
-BEDROCK_AGENT_ID = os.getenv('BEDROCK_AGENT_ID')
-AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
+# Lê configurações de ambiente/Secrets (recomendado no Streamlit Cloud)
+AWS_REGION = st.secrets.get("AWS_REGION") or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+AGENT_ID = st.secrets.get("BEDROCK_AGENT_ID") or os.getenv("BEDROCK_AGENT_ID", "")
 
-# Configuração da página
-st.set_page_config(
-    page_title="CET-MG - Assistente CNH",
-    page_icon="🚗",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# CSS personalizado estilo ChatGPT
-st.markdown("""
-<style>
-    /* Reset e configurações gerais */
-    .stApp {
-        background-color: #f7f7f8;
-    }
-    
-    /* Mensagens do usuário */
-    .user-message {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1rem 1.5rem;
-        border-radius: 18px 18px 4px 18px;
-        margin: 1rem 0 1rem 3rem;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-        position: relative;
-    }
-    
-    .user-message::before {
-        content: "👤";
-        position: absolute;
-        left: -2.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-        background: #667eea;
-        border-radius: 50%;
-        width: 2rem;
-        height: 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.8rem;
-    }
-    
-    /* Mensagens do assistente */
-    .assistant-message {
-        background: #f1f3f4;
-        color: #333;
-        padding: 1rem 1.5rem;
-        border-radius: 18px 18px 18px 4px;
-        margin: 1rem 3rem 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        position: relative;
-        border: 1px solid #e0e0e0;
-    }
-    
-    .assistant-message::before {
-        content: "🤖";
-        position: absolute;
-        right: -2.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-        background: #f1f3f4;
-        border-radius: 50%;
-        width: 2rem;
-        height: 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.8rem;
-        border: 1px solid #e0e0e0;
-    }
-    
-    /* Mensagens de sucesso */
-    .success-message {
-        background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-        color: white;
-        border-radius: 18px 18px 18px 4px;
-        margin: 1rem 3rem 1rem 0;
-    }
-    
-    /* Mensagens de erro */
-    .error-message {
-        background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-        color: white;
-        border-radius: 18px 18px 18px 4px;
-        margin: 1rem 3rem 1rem 0;
-    }
-    
-    /* Botões */
-    .chat-button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 25px;
-        padding: 0.5rem 1.5rem;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-    }
-    
-    .chat-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    }
-    
-    /* Sidebar */
-    .sidebar-info {
-        background: white;
-        border-radius: 15px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        border: 1px solid #e0e0e0;
-    }
-    
-    /* Animações */
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .user-message, .assistant-message, .success-message, .error-message {
-        animation: fadeIn 0.3s ease-out;
-    }
-    
-    /* Scrollbar personalizada */
-    ::-webkit-scrollbar {
-        width: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 10px;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: #c1c1c1;
-        border-radius: 10px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: #a8a8a8;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Inicializar session state
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-
-if 'session_id' not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-
-if 'quick_actions' not in st.session_state:
-    st.session_state.quick_actions = [
-        "Quero emitir a segunda via da minha CNH",
-        "Qual o status da minha solicitação?",
-        "Preciso de ajuda com PPD",
-        "Como consultar minha CNH?"
-    ]
-
-# Função para chamar o Bedrock Agent
-def call_bedrock_agent(user_text, session_id):
-    """Chama o Bedrock Agent e retorna a resposta"""
+# =========================
+# Cliente Bedrock Agent Runtime
+# =========================
+@st.cache_resource(show_spinner=False)
+def get_bedrock_agent_runtime():
     try:
-        runtime = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
-        
-        response = runtime.invoke_agent(
-            agentId=BEDROCK_AGENT_ID,
-            sessionId=session_id,
+        client = boto3.client("bedrock-agent-runtime", region_name=AWS_REGION)
+        return client
+    except Exception as e:
+        st.error(f"Falha ao inicializar o cliente Bedrock Agent Runtime: {e}")
+        st.stop()
+
+client = get_bedrock_agent_runtime()
+
+# =========================
+# Funções utilitárias
+# =========================
+
+def ensure_session():
+    """Garante um session_id estável por sessão de navegador e histórico de chat."""
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    if "messages" not in st.session_state:
+        st.session_state.messages = []  # [{"role": "user|assistant", "content": str}]
+
+
+def stream_agent_response(user_text: str):
+    """Invoca o Agent e faz streaming do texto de resposta.
+    A interface APENAS conversa com o Agent (sem chamar outras APIs diretamente).
+    """
+    if not AGENT_ID:
+        st.error("Defina BEDROCK_AGENT_ID em st.secrets ou variáveis de ambiente.")
+        return ""
+
+    try:
+        response = client.invoke_agent(
+            agentId=AGENT_ID,
+            sessionId=st.session_state.session_id,
             inputText=user_text,
         )
-        
-        # Coletar chunks de texto
-        output = []
-        for chunk in response.get("completion", []):
-            if "chunk" in chunk and "bytes" in chunk["chunk"]:
-                output.append(chunk["chunk"]["bytes"].decode("utf-8"))
-        
-        return "".join(output)
-        
+
+        full_text = ""
+        # A API retorna um EventStream em response["completion"], que contém 'chunk' com bytes.
+        for event in response.get("completion", []):
+            if "chunk" in event:
+                part = event["chunk"].get("bytes", b"").decode("utf-8", errors="ignore")
+                full_text += part
+                yield part
+        return full_text
+
+    except client.exceptions.ThrottlingException as e:
+        msg = "O serviço está ocupado (Throttling). Tente novamente em alguns segundos."
+        st.warning(msg)
+        yield "\n" + msg
     except Exception as e:
-        return f"❌ Erro ao processar mensagem: {str(e)}"
+        err = f"Erro ao invocar o Agent: {e}"
+        st.error(err)
+        yield "\n" + err
 
-# Interface principal
-def main():
-    # Título principal
-    st.title("🚗 CET-MG - Assistente Virtual")
-    st.markdown("---")
-    
-    # Adicionar mensagem de boas-vindas se não houver mensagens
-    if not st.session_state.messages:
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
 
-🚗 **Solicitar segunda via** de CNH, PPD ou ACC
-📋 **Consultar status** da sua solicitação em andamento
+# =========================
+# UI – Sidebar (informativo)
+# =========================
+with st.sidebar:
+    st.header("Sobre o sistema")
+    st.write(
+        """
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent commodo
+        suscipit lorem, sit amet egestas purus vulputate eget. Integer quis nisl
+        a erat facilisis tempus.
+        """
+    )
 
-Como posso ajudá-lo hoje?"""
-        })
-    
-    # Layout principal
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        # Exibir histórico de mensagens
-        for message in st.session_state.messages:
-            if message["role"] == "user":
-                st.markdown(f"""
-                <div class="user-message">
-                    {message["content"]}
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                # Detectar tipo de mensagem para aplicar estilo
-                message_class = "assistant-message"
-                if "✅" in message["content"]:
-                    message_class = "success-message"
-                elif "❌" in message["content"]:
-                    message_class = "error-message"
-                
-                st.markdown(f"""
-                <div class="{message_class}">
-                    {message["content"]}
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Input area
-        col_input, col_clear = st.columns([5, 1])
-        
-        with col_input:
-            user_input = st.text_input(
-                "Digite sua mensagem:", 
-                key="user_input", 
-                placeholder="Ex: Preciso emitir a segunda via da minha CNH",
-                label_visibility="collapsed"
-            )
-        
-        with col_clear:
-            clear_clicked = st.button("🗑️", help="Limpar chat", key="clear_btn")
-        
-        if clear_clicked:
-            st.session_state.messages = []
-            st.session_state.session_id = str(uuid.uuid4())
-            st.rerun()
-        
-        # Processar mensagem quando usuário digita e pressiona Enter
-        if user_input:
-            # Adicionar mensagem do usuário
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            
-            # Mostrar indicador de digitação
-            with st.spinner("Assistente está digitando..."):
-                # Chamar Bedrock Agent
-                response = call_bedrock_agent(user_input, st.session_state.session_id)
-            
-            # Adicionar resposta do assistente
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            
-            # Limpar input e recarregar
-            st.rerun()
-    
-    with col2:
-        # Informações sobre o sistema
-        st.markdown("""
-        <div class="sidebar-info">
-            <h4>🚗 Sobre o Sistema</h4>
-            <p>Assistente virtual para emissão e consulta de segunda via de CNH, PPD e ACC do CET-MG.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Como usar
-        st.markdown("""
-        <div class="sidebar-info">
-            <h4>📋 Como Usar</h4>
-            <p><strong>Solicitar 2ª via:</strong> Digite "quero emitir a segunda via da minha CNH"</p>
-            <p><strong>Consultar status:</strong> Digite "qual o status da minha solicitação"</p>
-            <p><strong>Fornecer dados:</strong> Informe nome, CPF, data de nascimento e nome da mãe</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Atalhos rápidos
-        st.markdown("""
-        <div class="sidebar-info">
-            <h4>⚡ Atalhos Rápidos</h4>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        for i, action in enumerate(st.session_state.quick_actions):
-            if st.button(f"💬 {action}", key=f"quick_{i}", help="Clique para enviar esta mensagem"):
-                # Adicionar mensagem do usuário
-                st.session_state.messages.append({"role": "user", "content": action})
-                
-                # Chamar Bedrock Agent
-                response = call_bedrock_agent(action, st.session_state.session_id)
-                
-                # Adicionar resposta do assistente
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                
-                # Recarregar
-                st.rerun()
+    st.header("Como usar")
+    st.write(
+        """
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam vitae
+        feugiat turpis. Sed posuere, dolor et faucibus pharetra, diam nisl
+        rhoncus odio, eu lacinia lorem odio non odio.
+        """
+    )
 
-if __name__ == "__main__":
-    main()
+    st.header("Atalhos rápidos")
+    st.write(
+        """
+        • Lorem ipsum dolor sit amet.\n
+        • Consectetur adipiscing elit.\n
+        • Integer quis nisl a erat.\n
+        • Sed posuere dolor et faucibus.
+        """
+    )
+
+# =========================
+# UI – Área principal (chat estilo ChatGPT)
+# =========================
+ensure_session()
+st.title("💬 Chat com Bedrock Agent")
+
+# Renderiza histórico
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"]) 
+
+# Entrada do usuário
+prompt = st.chat_input("Escreva sua mensagem…")
+
+if prompt:
+    # Guarda a mensagem do usuário e mostra
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Espaço para a resposta do agente
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        streamed_text = ""
+        for chunk in stream_agent_response(prompt):
+            streamed_text += chunk
+            placeholder.markdown(streamed_text)
+        if not streamed_text:
+            placeholder.markdown("(sem conteúdo)")
+
+    # Salva a resposta completa no histórico (se houver)
+    if streamed_text:
+        st.session_state.messages.append({"role": "assistant", "content": streamed_text})
+
+# Rodapé simples
+st.caption("Esta interface APENAS conversa com o Bedrock Agent configurado.")
