@@ -115,9 +115,8 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"]) 
 
-# Controles rápidos (fica logo acima da barra de pergunta)
-cc1, cc2 = st.columns([0.8, 0.2])
-with cc2:
+# Controles rápidos (fica acima do chat)
+with st.container():
     if st.button("🧹 Resetar sessão", help="Apaga o histórico e cria uma nova sessão de chat"):
         reset_session()
         st.toast("Sessão reiniciada.")
