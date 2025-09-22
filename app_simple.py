@@ -167,9 +167,7 @@ if prompt:
         else:
             if streamed_text.strip().startswith("Sua guia DAE foi gerada"):
                 formatted = format_dae_response(streamed_text)
-                placeholder.markdown(f"```
-{formatted}
-```")
+                placeholder.code(formatted)
 
     if streamed_text:
         # Se a resposta for de emissão de DAE, formata automaticamente
