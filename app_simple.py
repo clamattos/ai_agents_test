@@ -104,9 +104,8 @@ def format_dae_response(text: str) -> str:
     anchor = "Dados da emissão:"
     if anchor in text:
         text = text.split(anchor, 1)[1]
-    # Normaliza: troca quebras por espaço e colapsa espaços múltiplos
-    t = " ".join(text.replace("
-", " ").split())
+    # Normaliza: troca quebras de linha por espaço e colapsa espaços múltiplos
+    t = " ".join(text.replace("\n", " ").split())
     pattern = re.compile(r"([A-Za-z_]+):")
     matches = list(pattern.finditer(t))
     lines = []
@@ -117,8 +116,7 @@ def format_dae_response(text: str) -> str:
         value = t[start:end].strip()
         if value:
             lines.append(f"{key}: {value}")
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 with st.sidebar:
     st.header("Sobre o sistema")
