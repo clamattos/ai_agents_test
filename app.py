@@ -276,27 +276,93 @@ class BedrockAgent:
             return self._handle_general_request(user_message)
     
     def _handle_second_copy_request(self, message: str) -> str:
-        if st.session_state.current_step == 'welcome':
-            st.session_state.current_step = 'collecting_data'
-            return """Claro! Para emissão do documento, preciso de algumas informações:
-            
-**Por favor, preencha os dados abaixo:**
+        # Verificar se a mensagem contém dados do usuário
+        if self._extract_user_data(message):
+            return self._process_user_data(message)
+        
+        # Se não contém dados, pedir as informações
+        return """Claro! Para emissão do documento, preciso de algumas informações:
+        
+**Por favor, me informe:**
 - Nome completo
 - CPF (11 dígitos, apenas números)
 - Data de nascimento (formato DD/MM/AAAA)
 - Nome da mãe
 
 Pode me informar esses dados?"""
+    
+    def _extract_user_data(self, message: str) -> bool:
+        """Verifica se a mensagem contém dados do usuário"""
+        # Procurar por padrões que indicam dados do usuário
+        import re
         
-        elif st.session_state.current_step == 'collecting_data':
-            # Aqui seria ideal usar NLP para extrair os dados, mas por simplicidade
-            # vamos usar um formulário
-            return "Por favor, use o formulário ao lado para preencher os dados necessários."
+        # Verificar se tem CPF (11 dígitos)
+        cpf_pattern = r'\b\d{11}\b'
+        if re.search(cpf_pattern, message):
+            return True
         
-        elif st.session_state.current_step == 'confirming_data':
-            return "Dados confirmados! Vou gerar a guia DAE para pagamento."
+        # Verificar se tem data (DD/MM/AAAA)
+        date_pattern = r'\b\d{2}/\d{2}/\d{4}\b'
+        if re.search(date_pattern, message):
+            return True
+            
+        return False
+    
+    def _process_user_data(self, message: str) -> str:
+        """Processa os dados fornecidos pelo usuário"""
+        import re
         
-        return "Como posso ajudá-lo com a segunda via da CNH?"
+        # Extrair dados da mensagem
+        cpf_match = re.search(r'\b(\d{11})\b', message)
+        date_match = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', message)
+        
+        if cpf_match and date_match:
+            cpf = cpf_match.group(1)
+            data_nascimento = date_match.group(1)
+            
+            # Tentar extrair nome e nome da mãe (assumindo que são as primeiras e últimas palavras)
+            words = message.split()
+            # Remover CPF e data da lista de palavras
+            words = [w for w in words if not re.match(r'\d{11}', w) and not re.match(r'\d{2}/\d{2}/\d{4}', w)]
+            
+            if len(words) >= 2:
+                nome = words[0]
+                nome_mae = words[-1]
+                
+                # Processar com o backend
+                payload = {
+                    "cpf": cpf,
+                    "nome_condutor": nome,
+                    "data_nascimento": data_nascimento,
+                    "nome_mae": nome_mae
+                }
+                
+                result = self.backend.confirmar_dados(payload)
+                
+                if result.get("status") == 200:
+                    st.session_state.user_data = result["data"]
+                    return f"""✅ Dados confirmados com sucesso!
+
+**Seus dados cadastrados:**
+- CPF: {cpf}
+- Nome: {nome}
+- Data de nascimento: {data_nascimento}
+- Nome da mãe: {nome_mae}
+
+**Dados do sistema:**
+- CNH: {result['data']['retornoNSDGXS02']['numero_cnh']}
+- Endereço: {result['data']['retornoNSDGXS02']['endereco_condutor']}, {result['data']['retornoNSDGXS02']['numero_endereco_condutor']}
+- Município: {result['data']['retornoNSDGXS02']['nome_municipio_condutor']}/{result['data']['retornoNSDGXS02']['sigla_uf_municipio_condutor']}
+- Telefone: ({result['data']['retornoNSDGXS02']['ddd_celular']}) {result['data']['retornoNSDGXS02']['numero_celular']}
+- Email: {result['data']['retornoNSDGXS02']['email']}
+
+Deseja alterar algum dado ou posso gerar a guia DAE para pagamento?"""
+                else:
+                    return f"❌ Erro na validação: {result.get('error', 'Erro desconhecido')}"
+            else:
+                return "❌ Não consegui identificar o nome e nome da mãe. Pode me informar novamente?"
+        else:
+            return "❌ Não consegui identificar o CPF e data de nascimento. Pode me informar novamente?"
     
     def _handle_status_request(self, message: str) -> str:
         return """Para consultar o status da sua solicitação, preciso de:
@@ -307,6 +373,15 @@ Pode me informar esses dados?"""
 Use o formulário de consulta ao lado para verificar o status."""
     
     def _handle_general_request(self, message: str) -> str:
+        return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
+
+🚗 **Solicitar segunda via** de CNH, PPD ou ACC
+📋 **Consultar status** da sua solicitação em andamento
+
+Como posso ajudá-lo hoje?"""
+    
+    def get_welcome_message(self) -> str:
+        """Retorna a mensagem de boas-vindas inicial"""
         return """Olá! Sou o assistente do CET-MG. Posso ajudá-lo com:
 
 🚗 **Solicitar segunda via** de CNH, PPD ou ACC
@@ -327,6 +402,13 @@ def main():
     # Inicializar o agente
     if 'agent' not in st.session_state:
         st.session_state.agent = BedrockAgent()
+    
+    # Adicionar mensagem de boas-vindas se não houver mensagens
+    if not st.session_state.messages:
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": st.session_state.agent.get_welcome_message()
+        })
     
     # Layout principal
     col1, col2 = st.columns([2, 1])
@@ -351,13 +433,23 @@ def main():
                     """, unsafe_allow_html=True)
         
         # Input para nova mensagem
-        user_input = st.text_input("Digite sua mensagem:", key="user_input", placeholder="Ex: Preciso emitir a segunda via da minha CNH")
+        col_input, col_clear = st.columns([3, 1])
+        
+        with col_input:
+            user_input = st.text_input("Digite sua mensagem:", key="user_input", placeholder="Ex: Preciso emitir a segunda via da minha CNH")
+        
+        with col_clear:
+            if st.button("🗑️ Limpar Chat"):
+                st.session_state.messages = []
+                st.session_state.user_data = {}
+                st.session_state.current_step = 'welcome'
+                st.rerun()
         
         if st.button("Enviar") and user_input:
             # Adicionar mensagem do usuário
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # Processar com o agente
+            # Processar com o agente imediatamente
             response = st.session_state.agent.process_message(user_input)
             
             # Adicionar resposta do assistente
