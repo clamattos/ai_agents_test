@@ -147,31 +147,28 @@ with st.sidebar:
     st.header("Sobre o sistema")
     st.write(
         """
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent commodo
-        suscipit lorem, sit amet egestas purus vulputate eget. Integer quis nisl
-        a erat facilisis tempus.
+        Este é um sistema de demonstração de AI Agents na AWS. Ele tem como 
+        objetivo demonstrar uma conversa interativa com um agente que auxilia
+        na emissão de documentos (CNH, PPD, ACC) e na consulta do status 
+        de envio desses mesmos documentos.
         """
     )
 
     st.header("Como usar")
     st.write(
         """
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam vitae
-        feugiat turpis. Sed posuere, dolor et faucibus pharetra, diam nisl
-        rhoncus odio, eu lacinia lorem odio non odio.
+        Nessa demonstração, você pode pedir ajuda sobre: 
+        - Emissão de documento: "Quero emitir a segunda via da minha CNH"
+        - Consulta de status de envio de documento: "Quero consultar o status de envio da minha CNH"
         """
     )
 
-    st.header("Atalhos rápidos")
+    st.header("Disclaimer")
     st.write(
         """
-        • Lorem ipsum dolor sit amet.
+        • Esta demonstração tem o objetivo de validar uma Prova de Conceito.
 
-        • Consectetur adipiscing elit.
-
-        • Integer quis nisl a erat.
-
-        • Sed posuere dolor et faucibus.
+        • Todos os dados de retorno estão em MOCK e não são reais.
         """
     )
 
