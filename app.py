@@ -264,34 +264,28 @@ class BedrockAgent:
             """
     
     def process_message(self, user_message: str) -> str:
-        """Processa a mensagem do usuário e retorna a resposta do assistente"""
+        """Processa a mensagem do usuário seguindo o system prompt"""
         user_message_lower = user_message.lower()
         
-        # Verificar se já temos dados confirmados
-        if st.session_state.get('current_step') == 'data_confirmed':
-            if any(word in user_message_lower for word in ['sim', 'gerar', 'dae', 'guia', 'pagamento']):
-                return self._generate_dae_guide()
-            elif any(word in user_message_lower for word in ['não', 'alterar', 'mudar']):
-                return "Entendi. Para alterar os dados, use o formulário ao lado ou me informe os novos dados."
-            else:
-                return "Deseja gerar a guia DAE para pagamento ou alterar algum dado?"
-        
-        # Verificar se a mensagem contém dados do usuário primeiro
-        if self._extract_user_data(user_message):
-            return self._process_user_data(user_message)
-        
-        # Detectar intenção apenas se não contém dados
-        if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
-            return self._handle_second_copy_request(user_message)
-        elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
-            return self._handle_status_request(user_message)
+        # Seguir o fluxo do system prompt
+        if st.session_state.get('current_step') == 'collecting_data':
+            return self._handle_data_collection(user_message)
+        elif st.session_state.get('current_step') == 'confirming_data':
+            return self._handle_data_confirmation(user_message)
+        elif st.session_state.get('current_step') == 'generating_dae':
+            return self._handle_dae_generation(user_message)
         else:
-            return self._handle_general_request(user_message)
+            return self._handle_initial_request(user_message)
     
-    def _handle_second_copy_request(self, message: str) -> str:
-        # Se não contém dados, pedir as informações
-        return """Claro! Para emissão do documento, preciso de algumas informações:
+    def _handle_initial_request(self, message: str) -> str:
+        """Handle initial user request following system prompt"""
+        user_message_lower = message.lower()
         
+        # Detectar intenção conforme system prompt
+        if any(word in user_message_lower for word in ['segunda via', 'emitir', 'cnh', 'ppd', 'acc']):
+            st.session_state.current_step = 'collecting_data'
+            return """Claro! Para emissão do documento, preciso de algumas informações:
+
 **Por favor, me informe:**
 - Nome completo
 - CPF (11 dígitos, apenas números)
@@ -299,6 +293,76 @@ class BedrockAgent:
 - Nome da mãe
 
 Pode me informar esses dados?"""
+        elif any(word in user_message_lower for word in ['status', 'consulta', 'situação', 'andamento']):
+            return """Para consultar o status da sua solicitação, preciso de:
+            
+- CPF (11 dígitos)
+- Data de nascimento (formato DD/MM/AAAA)
+
+Use o formulário de consulta ao lado para verificar o status."""
+        else:
+            return self._handle_general_request(message)
+    
+    def _handle_data_collection(self, message: str) -> str:
+        """Handle data collection phase following system prompt"""
+        # Verificar se a mensagem contém dados do usuário
+        if self._extract_user_data(message):
+            # Extrair dados conforme system prompt
+            user_data = self._extract_user_data_from_message(message)
+            if user_data:
+                # Confirmar dados conforme system prompt
+                st.session_state.current_step = 'confirming_data'
+                st.session_state.temp_user_data = user_data
+                return f"""Vou seguir com a solicitação de 2ª via para: 
+CPF {user_data['cpf']}, Nome {user_data['nome_condutor']}, Nascimento {user_data['data_nascimento']}, Mãe {user_data['nome_mae']}. 
+
+Confirmar?"""
+            else:
+                return "❌ Não consegui identificar todos os dados necessários. Pode me informar novamente?"
+        else:
+            return "Por favor, me informe os dados necessários: nome completo, CPF (11 dígitos), data de nascimento (DD/MM/AAAA) e nome da mãe."
+    
+    def _handle_data_confirmation(self, message: str) -> str:
+        """Handle data confirmation phase following system prompt"""
+        user_message_lower = message.lower()
+        
+        if any(word in user_message_lower for word in ['sim', 'confirmar', 'ok', 'certo']):
+            # Chamar confirmar-dados conforme system prompt
+            user_data = st.session_state.temp_user_data
+            result = self.backend.confirmar_dados(user_data)
+            
+            if result.get("status") == 200:
+                st.session_state.user_data = result["data"]
+                st.session_state.current_step = 'data_confirmed'
+                
+                # Apresentar todos os dados conforme system prompt
+                data = result["data"]["retornoNSDGXS02"]
+                return f"""✅ Dados confirmados com sucesso!
+
+**Seus dados cadastrados:**
+- CPF: {data['cpf']}
+- Nome: {data.get('nome_condutor', 'N/A')}
+- CNH: {data['numero_cnh']}
+- Endereço: {data['endereco_condutor']}, {data['numero_endereco_condutor']}
+- Município: {data['nome_municipio_condutor']}/{data['sigla_uf_municipio_condutor']}
+- Telefone: ({data['ddd_celular']}) {data['numero_celular']}
+- Email: {data['email']}
+
+Deseja alterar algum dado? Se sim: "Vou te repassar para nosso agente de alteração de dados." Se não: "Vou gerar a guia (DAE) para pagamento." """
+            else:
+                return f"❌ Erro na validação: {result.get('error', 'Erro desconhecido')}"
+        else:
+            return "Dados não confirmados. Deseja alterar algum dado ou confirmar novamente?"
+    
+    def _handle_dae_generation(self, message: str) -> str:
+        """Handle DAE generation phase following system prompt"""
+        user_message_lower = message.lower()
+        
+        if any(word in user_message_lower for word in ['sim', 'gerar', 'dae', 'guia', 'pagamento']):
+            # Chamar exibir-opcoes-pagamento conforme system prompt
+            return self._generate_dae_guide()
+        else:
+            return "Deseja gerar a guia DAE para pagamento?"
     
     def _extract_user_data(self, message: str) -> bool:
         """Verifica se a mensagem contém dados do usuário"""
@@ -316,6 +380,36 @@ Pode me informar esses dados?"""
             return True
             
         return False
+    
+    def _extract_user_data_from_message(self, message: str) -> dict:
+        """Extrai dados do usuário da mensagem"""
+        import re
+        
+        # Extrair dados da mensagem
+        cpf_match = re.search(r'\b(\d{11})\b', message)
+        date_match = re.search(r'\b(\d{2}/\d{2}/\d{4})\b', message)
+        
+        if cpf_match and date_match:
+            cpf = cpf_match.group(1)
+            data_nascimento = date_match.group(1)
+            
+            # Tentar extrair nome e nome da mãe
+            words = message.split()
+            # Remover CPF e data da lista de palavras
+            words = [w for w in words if not re.match(r'\d{11}', w) and not re.match(r'\d{2}/\d{2}/\d{4}', w)]
+            
+            if len(words) >= 2:
+                nome = words[0]
+                nome_mae = words[-1]
+                
+                return {
+                    "cpf": cpf,
+                    "nome_condutor": nome,
+                    "data_nascimento": data_nascimento,
+                    "nome_mae": nome_mae
+                }
+        
+        return None
     
     def _process_user_data(self, message: str) -> str:
         """Processa os dados fornecidos pelo usuário"""
@@ -400,14 +494,14 @@ Como posso ajudá-lo hoje?"""
 Como posso ajudá-lo hoje?"""
     
     def _generate_dae_guide(self) -> str:
-        """Gera a guia DAE para pagamento"""
+        """Gera a guia DAE para pagamento seguindo o system prompt"""
         if not st.session_state.get('user_data'):
             return "❌ Erro: Dados do usuário não encontrados. Por favor, forneça os dados novamente."
         
         # Usar dados já confirmados
         user_data = st.session_state.user_data['retornoNSDGXS02']
         
-        # Preparar payload para gerar guia
+        # Preparar payload para gerar guia (reaproveitando dados conforme system prompt)
         payload = {
             "flow_id": st.session_state.user_data.get('flow_id'),
             "cpf": user_data['cpf'],
@@ -429,14 +523,23 @@ Como posso ajudá-lo hoje?"""
         if result.get("status") == 200:
             st.session_state.current_step = 'dae_generated'
             data = result['data']['retornoNsdgx414']
+            
+            # Exibir todos os dados da guia conforme system prompt
             return f"""✅ Guia DAE gerada com sucesso!
 
 **Dados da Guia:**
+- **Código de Retorno:** {result['data']['retornoNsdgxS2A']['codigo_retorno']}
+- **Mensagem:** {result['data']['retornoNsdgxS2A']['mensagem_retorno']}
 - **Valor:** R$ {data['valor_taxa']}
 - **Vencimento:** {data['data_vencimento']}
 - **Linha Digitável:** {data['linha_digitavel']}
 - **Código de Barras:** {data['codigo_barras']}
 - **Nosso Número:** {data['nosso_numero']}
+- **Nome Contribuinte:** {data['nome_contribuinte']}
+- **CPF Contribuinte:** {data['cpf_contribuinte']}
+- **Data Emissão:** {data['data_emissao']}
+- **Município:** {data['descricao_municipio']}
+- **Código Taxa:** {data['codigo_taxa']}
 
 **Instruções:**
 - Pague em qualquer banco ou casa lotérica
